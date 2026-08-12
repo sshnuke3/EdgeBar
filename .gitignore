@@ -1,0 +1,38 @@
+# Build artifacts
+build/
+obj-*/
+*.o
+*.obj
+*.exe
+*.out
+
+# CMake
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+compile_commands.json
+Makefile
+*.cmake
+
+# Debian packaging
+debian/edgebar/
+debian/.debhelper/
+debian/changelog.*.save
+debian/files
+debian/*.substvars
+debian/debhelper-build-stamp
+*.deb
+*.ddeb
+*.buildinfo
+*.changes
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db

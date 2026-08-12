@@ -1,0 +1,31 @@
+Source: edgebar
+Section: utils
+Priority: optional
+Maintainer: EdgeBar Team <edgebar@example.com>
+Build-Depends: cmake,
+               debhelper-compat (= 13),
+               qtbase5-dev | qt6-base-dev,
+               libdtkcore-dev | libdtkcore6-dev,
+               libdtkgui-dev | libdtkgui6-dev,
+               libdtkwidget-dev | libdtkwidget6-dev
+Standards-Version: 4.6.0
+Homepage: https://github.com/linuxdeepin/EdgeBar
+Rules-Requires-Root: no
+
+Package: edgebar
+Architecture: any
+Depends: ${shlibs:Depends},
+         ${misc:Depends},
+         libdtkcore5 | libdtkcore6,
+         libdtkgui5 | libdtkgui6,
+         libdtkwidget5 | libdtkwidget6
+Description: Edge Smart Panel for deepin desktop
+ EdgeBar is a slide-out panel anchored to the screen edge.
+ .
+ Features:
+  * System Monitor: real-time CPU gauge, memory bar, network graph, temperature
+  * Clipboard History: search and re-copy recent clipboard items with pin support
+  * Quick Launch: fuzzy search applications and system commands
+  * Pomodoro Timer: 25-min focus sessions with circular progress
+  * DTK blur + theme-adaptive UI
+  * DConfig for persistent settings

@@ -1,0 +1,7 @@
+edgebar (1.0.0-1) unstable; urgency=medium
+
+  * Initial release.
+  * Edge smart panel with system monitor, clipboard, quick launch, pomodoro
+  * Features: CPU gauge, memory bar, network graph, clipboard history, fuzzy search
+
+ -- EdgeBar Team <edgebar@example.com>  Tue, 12 Aug 2025 00:00:00 +0800
