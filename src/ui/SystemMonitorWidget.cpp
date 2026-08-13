@@ -40,6 +40,7 @@ void SystemMonitorWidget::paintEvent(QPaintEvent *)
 
     // 检查是否需要显示告警条
     bool hasCpuAlert = m_monitor->topProcess().pid > 0;
+    bool hasMemPressure = m_monitor->memPressureLevel() >= SystemMonitor::MemPressureSome;
     bool hasTrafficAlert = false;
     if (m_trafficThresholdMB > 0) {
         qint64 dailyMB = (m_monitor->dailyRxBytes() + m_monitor->dailyTxBytes()) / (1024 * 1024);
@@ -48,6 +49,7 @@ void SystemMonitorWidget::paintEvent(QPaintEvent *)
 
     int alertH = 0;
     if (hasCpuAlert) alertH += 24;
+    if (hasMemPressure) alertH += 24;
     if (hasTrafficAlert) alertH += 24;
 
     QRect alertRect(r.left(), r.top(), r.width(), alertH);
@@ -58,6 +60,10 @@ void SystemMonitorWidget::paintEvent(QPaintEvent *)
     int alertY = r.top();
     if (hasCpuAlert) {
         drawAlertBar(&painter, QRect(r.left(), alertY, r.width(), 24));
+        alertY += 24;
+    }
+    if (hasMemPressure) {
+        drawMemPressureBar(&painter, QRect(r.left(), alertY, r.width(), 24));
         alertY += 24;
     }
     if (hasTrafficAlert) {
@@ -109,6 +115,16 @@ void SystemMonitorWidget::drawAlertBar(QPainter *painter, const QRect &rect)
     QString alertText = QStringLiteral("%1  %2%")
         .arg(proc.name)
         .arg(proc.cpuPercent, 0, 'f', 0);
+
+    // 持续时长标签
+    if (proc.sustainedSeconds > 0) {
+        int mins = proc.sustainedSeconds / 60;
+        int secs = proc.sustainedSeconds % 60;
+        if (mins > 0)
+            alertText += QStringLiteral("  %1m%2s").arg(mins).arg(secs);
+        else
+            alertText += QStringLiteral("  %1s").arg(secs);
+    }
     painter->setPen(QColor(255, 255, 255));
     QFont alertFont = font();
     alertFont.setPointSizeF(alertFont.pointSizeF() * 0.85);
@@ -163,6 +179,78 @@ void SystemMonitorWidget::drawTrafficAlert(QPainter *painter, const QRect &rect)
     painter->restore();
 }
 
+// ---------------------------------------------------------------------------
+// drawMemPressureBar: 内存压力预警条
+// ---------------------------------------------------------------------------
+
+void SystemMonitorWidget::drawMemPressureBar(QPainter *painter, const QRect &rect)
+{
+    painter->save();
+
+    auto level = m_monitor->memPressureLevel();
+
+    // 根据等级选择颜色
+    QColor baseColor, darkColor;
+    QString levelText;
+    if (level == SystemMonitor::MemPressureCritical) {
+        baseColor = QColor(231, 76, 60, 220);
+        darkColor = QColor(192, 57, 43, 200);
+        levelText = QStringLiteral("内存严重不足");
+    } else if (level == SystemMonitor::MemPressureFull) {
+        baseColor = QColor(245, 124, 0, 220);
+        darkColor = QColor(230, 100, 0, 200);
+        levelText = QStringLiteral("内存压力");
+    } else {
+        baseColor = QColor(255, 193, 7, 220);
+        darkColor = QColor(255, 160, 0, 200);
+        levelText = QStringLiteral("内存偏紧");
+    }
+
+    // 渐变背景
+    QLinearGradient grad(rect.topLeft(), rect.bottomLeft());
+    grad.setColorAt(0, baseColor);
+    grad.setColorAt(1, darkColor);
+    painter->setPen(Qt::NoPen);
+    painter->setBrush(grad);
+    painter->drawRoundedRect(rect, 4, 4);
+
+    // 图标（内存条形状）
+    int iconX = rect.left() + 10;
+    int iconY = rect.center().y();
+    painter->setBrush(QColor(255, 255, 255, 200));
+    painter->drawRoundedRect(iconX - 6, iconY - 4, 12, 8, 1, 1);
+    // 内存条上的小线条
+    painter->setPen(QPen(QColor(0, 0, 0, 80), 1));
+    painter->drawLine(iconX - 4, iconY - 2, iconX + 4, iconY - 2);
+    painter->drawLine(iconX - 4, iconY, iconX + 4, iconY);
+    painter->drawLine(iconX - 4, iconY + 2, iconX + 4, iconY + 2);
+
+    // 构建告警文字
+    QString alertText = levelText;
+    float avg10 = m_monitor->memPressureAvg10();
+    if (avg10 > 0) {
+        alertText += QStringLiteral("  (PSI: %1%)").arg(avg10, 0, 'f', 1);
+    }
+
+    // 如果有高内存进程，显示 top 1
+    const auto &memProcs = m_monitor->topMemProcesses();
+    if (!memProcs.isEmpty()) {
+        const auto &top = memProcs.first();
+        QString memStr = formatSize(top.rssBytes);
+        alertText += QStringLiteral("  %1: %2").arg(top.name).arg(memStr);
+    }
+
+    painter->setPen(QColor(255, 255, 255));
+    QFont alertFont = font();
+    alertFont.setPointSizeF(alertFont.pointSizeF() * 0.85);
+    alertFont.setBold(true);
+    painter->setFont(alertFont);
+    painter->drawText(QRect(iconX + 14, rect.top(), rect.width() - 22, rect.height()),
+                      Qt::AlignLeft | Qt::AlignVCenter, alertText);
+
+    painter->restore();
+}
+
 void SystemMonitorWidget::drawCpuGauge(QPainter *painter, const QRect &rect)
 {
     painter->save();
@@ -176,14 +264,37 @@ void SystemMonitorWidget::drawCpuGauge(QPainter *painter, const QRect &rect)
     painter->setPen(QPen(QColor(0, 0, 0, 25), 8, Qt::SolidLine, Qt::RoundCap));
     painter->drawArc(cx - radius, cy - radius, size, size, 0, 360 * 16);
 
-    // CPU 使用率弧线
+    // CPU 使用率弧线 — 渐变色
     float usage = m_monitor->cpuUsage();
     int angle = static_cast<int>(usage * 360 / 100);
 
-    QColor cpuColor;
-    if (usage < 50)      cpuColor = QColor(72, 174, 79);
-    else if (usage < 80) cpuColor = QColor(245, 167, 38);
-    else                 cpuColor = QColor(231, 76, 60);
+    // 渐变色：绿 → 黄 → 橙 → 红
+    auto usageToColor = [](float u) -> QColor {
+        u = qBound(0.0f, u, 100.0f);
+        struct Stop { float val; QColor color; };
+        static const Stop stops[] = {
+            {0.0f,  QColor(72, 174, 79)},    // 绿
+            {50.0f, QColor(245, 200, 50)},   // 黄绿
+            {75.0f, QColor(245, 167, 38)},   // 橙黄
+            {90.0f, QColor(231, 76, 60)},    // 红
+            {100.0f, QColor(200, 40, 40)}    // 深红
+        };
+        for (int i = 0; i < 4; ++i) {
+            if (u <= stops[i + 1].val) {
+                float range = stops[i + 1].val - stops[i].val;
+                float ratio = range > 0 ? (u - stops[i].val) / range : 0;
+                const QColor &c1 = stops[i].color;
+                const QColor &c2 = stops[i + 1].color;
+                int r = static_cast<int>(c1.red() + (c2.red() - c1.red()) * ratio);
+                int g = static_cast<int>(c1.green() + (c2.green() - c1.green()) * ratio);
+                int b = static_cast<int>(c1.blue() + (c2.blue() - c1.blue()) * ratio);
+                return QColor(r, g, b);
+            }
+        }
+        return QColor(200, 40, 40);
+    };
+
+    QColor cpuColor = usageToColor(usage);
 
     painter->setPen(QPen(cpuColor, 8, Qt::SolidLine, Qt::RoundCap));
     painter->drawArc(cx - radius, cy - radius, size, size, 90 * 16, -angle * 16);
@@ -375,36 +486,99 @@ void SystemMonitorWidget::drawTemperature(QPainter *painter, const QRect &rect)
 
     float temp = m_monitor->temperature();
 
+    // 渐变色：根据温度在 30°C~100°C 之间插值
+    // 30°C → 蓝(52,152,219) → 50°C → 绿(80,200,80) → 70°C → 黄(255,180,0)
+    // → 85°C → 橙(255,120,0) → 100°C → 红(255,60,60)
+    auto tempToColor = [](float t) -> QColor {
+        // 钳制到 [30, 100]
+        t = qBound(30.0f, t, 100.0f);
+        // 关键点
+        struct ColorStop { float temp; QColor color; };
+        static const ColorStop stops[] = {
+            {30.0f, QColor(100, 180, 255)},   // 冷蓝
+            {50.0f, QColor(80, 200, 80)},     // 绿
+            {70.0f, QColor(255, 180, 0)},     // 黄
+            {85.0f, QColor(255, 120, 0)},     // 橙
+            {100.0f, QColor(255, 60, 60)}     // 红
+        };
+        for (int i = 0; i < 4; ++i) {
+            if (t <= stops[i + 1].temp) {
+                float range = stops[i + 1].temp - stops[i].temp;
+                float ratio = (t - stops[i].temp) / range;
+                const QColor &c1 = stops[i].color;
+                const QColor &c2 = stops[i + 1].color;
+                int r = static_cast<int>(c1.red() + (c2.red() - c1.red()) * ratio);
+                int g = static_cast<int>(c1.green() + (c2.green() - c1.green()) * ratio);
+                int b = static_cast<int>(c1.blue() + (c2.blue() - c1.blue()) * ratio);
+                return QColor(r, g, b);
+            }
+        }
+        return QColor(255, 60, 60);
+    };
+
+    QColor tempColor = tempToColor(temp);
+
     // 数值
     QFont bigFont = font();
     bigFont.setPointSizeF(bigFont.pointSizeF() * 1.8);
     bigFont.setBold(true);
     painter->setFont(bigFont);
 
-    QColor tempColor;
-    if (temp < 50)      tempColor = QColor(52, 152, 219);
-    else if (temp < 70)  tempColor = QColor(245, 167, 38);
-    else                 tempColor = QColor(231, 76, 60);
-
     painter->setPen(tempColor);
     painter->drawText(QRect(rect.left(), rect.top() + 20, rect.width(), 40),
                       Qt::AlignCenter,
                       QString::number(static_cast<int>(temp)) + "°C");
 
-    // 温度计可视化
+    // 温度计可视化 — 渐变填充
     int barY = rect.top() + 70;
     int barH = 8;
     QRect barRect(rect.left() + 20, barY, rect.width() - 40, barH);
 
+    // 背景
     painter->setPen(Qt::NoPen);
     painter->setBrush(QColor(0, 0, 0, 20));
     painter->drawRoundedRect(barRect, 4, 4);
 
-    float tempPercent = qBound(0.0f, temp / 100.0f, 1.0f);
+    // 渐变填充条
+    float tempPercent = qBound(0.0f, (temp - 30.0f) / 70.0f, 1.0f);
     int fillW = static_cast<int>((barRect.width() - 4) * tempPercent);
     QRect fillRect(barRect.left() + 2, barRect.top() + 2, fillW, barH - 4);
-    painter->setBrush(tempColor);
+
+    // 用渐变色绘制填充
+    QLinearGradient tempGradient(fillRect.left(), 0, fillRect.right(), 0);
+    // 根据当前温度范围生成渐变
+    float startTemp = 30.0f;
+    float endTemp = qMax(temp, 30.0f);
+    int segments = 5;
+    for (int i = 0; i <= segments; ++i) {
+        float t = startTemp + (endTemp - startTemp) * i / segments;
+        tempGradient.setColorAt(static_cast<qreal>(i) / segments, tempToColor(t));
+    }
+    painter->setBrush(tempGradient);
     painter->drawRoundedRect(fillRect, 3, 3);
+
+    // 刻度标记
+    QFont tinyFont = font();
+    tinyFont.setPointSizeF(tinyFont.pointSizeF() * 0.6);
+    painter->setFont(tinyFont);
+    painter->setPen(QColor(0, 0, 0, 100));
+
+    // 50°C 刻度
+    int mark50 = barRect.left() + 2 + static_cast<int>((barRect.width() - 4) * (50.0f - 30.0f) / 70.0f);
+    painter->drawLine(mark50, barRect.bottom(), mark50, barRect.bottom() + 3);
+    painter->drawText(QRect(mark50 - 15, barRect.bottom() + 4, 30, 12),
+                      Qt::AlignCenter, "50");
+
+    // 70°C 刻度
+    int mark70 = barRect.left() + 2 + static_cast<int>((barRect.width() - 4) * (70.0f - 30.0f) / 70.0f);
+    painter->drawLine(mark70, barRect.bottom(), mark70, barRect.bottom() + 3);
+    painter->drawText(QRect(mark70 - 15, barRect.bottom() + 4, 30, 12),
+                      Qt::AlignCenter, "70");
+
+    // 85°C 刻度（警戒线）
+    int mark85 = barRect.left() + 2 + static_cast<int>((barRect.width() - 4) * (85.0f - 30.0f) / 70.0f);
+    painter->setPen(QPen(QColor(255, 60, 60, 180), 1, Qt::DashLine));
+    painter->drawLine(mark85, barRect.top() - 2, mark85, barRect.bottom() + 3);
 
     painter->restore();
 }
@@ -453,6 +627,24 @@ void SystemMonitorWidget::contextMenuEvent(QContextMenuEvent *event)
     QMenu menu(this);
 
     auto *exportAct = menu.addAction(QStringLiteral("导出历史数据 (CSV)"));
+
+    // CPU 持续告警阈值设置
+    auto *sustainedMenu = menu.addMenu(QStringLiteral("CPU持续告警"));
+    sustainedMenu->addAction(QStringLiteral("立即告警"), [this]() {
+        m_monitor->setCpuSustainedSeconds(0);
+    });
+    sustainedMenu->addAction(QStringLiteral("持续 5秒"), [this]() {
+        m_monitor->setCpuSustainedSeconds(5);
+    });
+    sustainedMenu->addAction(QStringLiteral("持续 10秒"), [this]() {
+        m_monitor->setCpuSustainedSeconds(10);
+    });
+    sustainedMenu->addAction(QStringLiteral("持续 30秒"), [this]() {
+        m_monitor->setCpuSustainedSeconds(30);
+    });
+    sustainedMenu->addAction(QStringLiteral("持续 60秒"), [this]() {
+        m_monitor->setCpuSustainedSeconds(60);
+    });
 
     // 今日流量信息
     qint64 dailyMB = (m_monitor->dailyRxBytes() + m_monitor->dailyTxBytes()) / (1024 * 1024);

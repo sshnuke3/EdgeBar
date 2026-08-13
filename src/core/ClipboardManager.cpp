@@ -3,6 +3,7 @@
 
 #include <QGuiApplication>
 #include <QClipboard>
+#include <QMimeData>
 #include <QDateTime>
 #include <QDebug>
 #include <QBuffer>

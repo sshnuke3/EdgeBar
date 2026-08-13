@@ -46,6 +46,7 @@ private:
     void drawTemperature(QPainter *painter, const QRect &rect);
     void drawAlertBar(QPainter *painter, const QRect &rect);
     void drawTrafficAlert(QPainter *painter, const QRect &rect);
+    void drawMemPressureBar(QPainter *painter, const QRect &rect);
 
     QString formatSize(qint64 bytes) const;
     QString formatSpeed(float kbps) const;

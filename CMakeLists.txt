@@ -79,6 +79,7 @@ set(SOURCES
     src/ui/QuickLaunchWidget.cpp
     src/ui/PomodoroWidget.cpp
     src/ui/MiniCountdown.cpp
+    src/ui/HealthReminderWidget.cpp
 )
 
 # ---- 可执行目标 ----
@@ -124,6 +125,9 @@ if(TEST_ENABLED)
     target_include_directories(test_searchengine PRIVATE src src/core src/plugins src/ui)
     target_link_libraries(test_searchengine PRIVATE
         Qt${QT_VERSION_MAJOR}::Core
+        Qt${QT_VERSION_MAJOR}::Gui
+        Qt${QT_VERSION_MAJOR}::Widgets
+        Qt${QT_VERSION_MAJOR}::Network
         Qt${QT_VERSION_MAJOR}::Test
         ${DTK_LIBS}
     )
@@ -145,6 +149,9 @@ if(TEST_ENABLED)
     target_include_directories(test_systemmonitor PRIVATE src src/core src/plugins src/ui)
     target_link_libraries(test_systemmonitor PRIVATE
         Qt${QT_VERSION_MAJOR}::Core
+        Qt${QT_VERSION_MAJOR}::Gui
+        Qt${QT_VERSION_MAJOR}::Widgets
+        Qt${QT_VERSION_MAJOR}::Network
         Qt${QT_VERSION_MAJOR}::Test
         ${DTK_LIBS}
     )

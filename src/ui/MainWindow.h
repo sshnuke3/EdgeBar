@@ -19,6 +19,7 @@ class ClipboardWidget;
 class QuickLaunchWidget;
 class PomodoroWidget;
 class MiniCountdown;
+class HealthReminderWidget;
 
 /**
  * @brief 桌边栏主窗口
@@ -37,7 +38,7 @@ public:
     ~MainWindow();
 
     enum EdgeSide { LeftEdge, RightEdge };
-    enum TabIndex { SystemTab, ClipboardTab, LaunchTab, PomodoroTab };
+    enum TabIndex { SystemTab, ClipboardTab, LaunchTab, PomodoroTab, HealthTab };
 
     void setEdgeSide(EdgeSide side);
     void setActiveTab(TabIndex tab);
@@ -76,6 +77,7 @@ private:
     ClipboardWidget      *m_clipboardWidget = nullptr;
     QuickLaunchWidget    *m_quickLaunchWidget = nullptr;
     PomodoroWidget       *m_pomodoroWidget = nullptr;
+    HealthReminderWidget *m_healthWidget = nullptr;
     MiniCountdown        *m_miniCountdown = nullptr;
 
     // 核心数据
@@ -84,7 +86,7 @@ private:
     Dtk::Core::DConfig *m_config = nullptr;
 
     // Tab 按钮
-    DPushButton *m_tabButtons[4] = {nullptr};
+    DPushButton *m_tabButtons[5] = {nullptr};
 
     // 边缘隐藏
     EdgeSide    m_edgeSide = RightEdge;

@@ -53,6 +53,7 @@ public:
         int     pid;
         QString name;
         float   cpuPercent;  // 单核百分比（可超过 100*N核）
+        int     sustainedSeconds = 0;  // 持续高占用秒数
     };
 
     /// 获取 CPU 占用最高的进程（无告警时为空）
@@ -60,6 +61,38 @@ public:
 
     /// 设置 CPU 告警阈值（0=禁用）
     void setCpuAlertThreshold(int threshold) { m_cpuAlertThreshold = threshold; }
+
+    /// 设置 CPU 持续高占用告警秒数（默认 0=立即告警）
+    void setCpuSustainedSeconds(int seconds) { m_cpuSustainedThreshold = seconds; }
+
+    /// 内存压力等级
+    enum MemPressureLevel {
+        MemPressureNone = 0,    // 正常
+        MemPressureSome  = 1,   // 部分进程被阻塞
+        MemPressureFull  = 2,   // 全部进程被阻塞
+        MemPressureCritical = 3 // 严重，建议关闭进程
+    };
+
+    /// 获取内存压力等级
+    MemPressureLevel memPressureLevel() const { return m_memPressureLevel; }
+
+    /// 获取内存压力 avg10 值（百分比，0-100）
+    float memPressureAvg10() const { return m_memPressureAvg10; }
+
+    /// 获取内存压力 total 值（微秒）
+    qint64 memPressureTotal() const { return m_memPressureTotal; }
+
+    /// 获取占用内存最高的进程列表
+    struct MemProcessInfo {
+        int     pid;
+        QString name;
+        qint64  rssBytes;    // 实际物理内存
+        float   memPercent;  // 占总内存百分比
+    };
+    const QList<MemProcessInfo> &topMemProcesses() const { return m_topMemProcesses; }
+
+    /// 设置内存压力告警阈值（百分比，0=禁用）
+    void setMemPressureThreshold(int percent) { m_memPressureThreshold = percent; }
 
     /// 获取当日累计流量（bytes）
     qint64 dailyRxBytes() const { return m_dailyRxBytes; }
@@ -94,6 +127,8 @@ private:
     void readNetDev();
     void readTemperature();
     void readTopProcess();
+    void readMemPressure();
+    void readTopMemProcesses();
 
     QTimer m_timer;
 
@@ -122,7 +157,12 @@ private:
 
     // 进程监控
     int m_cpuAlertThreshold = 0;
+    int m_cpuSustainedThreshold = 0;  // 持续 N 秒才告警
     ProcessInfo m_topProcess;
+    // 持续追踪：记录上次 top process 的 pid 和累计秒数
+    int m_lastTopPid = 0;
+    int m_sustainedCount = 0;  // 连续高于阈值的 poll 次数
+    int m_pollIntervalMs = 2000;  // poll 间隔，用于计算持续秒数
     // pid -> (utime+stime, timestamp) 用于计算增量
     QMap<int, QPair<qint64, qint64>> m_prevProcTimes;
     // 上次 poll 的总 jiffies（用于进程 CPU% 计算）
@@ -137,6 +177,13 @@ private:
     // 历史快照（用于 CSV 导出，上限 360 条 = 12 分钟 @2s）
     QVector<Snapshot> m_snapshots;
     static constexpr int MAX_SNAPSHOTS = 360;
+
+    // 内存压力（PSI）
+    MemPressureLevel m_memPressureLevel = MemPressureNone;
+    float   m_memPressureAvg10 = 0;
+    qint64  m_memPressureTotal = 0;
+    int     m_memPressureThreshold = 0;  // 百分比阈值
+    QList<MemProcessInfo> m_topMemProcesses;
 
     static constexpr int HISTORY_SIZE = 60;
 };

@@ -7,6 +7,8 @@
 #include <QDir>
 #include <QDebug>
 #include <QStandardPaths>
+#include <QRegularExpression>
+#include <algorithm>
 
 // ---------------------------------------------------------------------------
 // 构造函数
@@ -24,6 +26,7 @@ SystemMonitor::SystemMonitor(QObject *parent)
 void SystemMonitor::start(int intervalMs)
 {
     connect(&m_timer, &QTimer::timeout, this, &SystemMonitor::poll, Qt::UniqueConnection);
+    m_pollIntervalMs = intervalMs;
     m_timer.start(intervalMs);
 }
 
@@ -43,6 +46,8 @@ void SystemMonitor::poll()
     readNetDev();
     readTemperature();
     readTopProcess();
+    readMemPressure();
+    readTopMemProcesses();
 
     // 累计当日流量
     QDate today = QDate::currentDate();
@@ -389,11 +394,36 @@ void SystemMonitor::readTopProcess()
 
     // 设置 topProcess（只保留超过阈值的）
     if (bestCpu >= m_cpuAlertThreshold) {
-        m_topProcess = bestProc;
-        qCDebug(edgebarLog) << "CPU alert:" << bestProc.name
-                            << "pid=" << bestProc.pid
-                            << "cpu=" << bestProc.cpuPercent << "%";
+        // 持续追踪：同一 PID 连续高于阈值
+        if (bestProc.pid == m_lastTopPid) {
+            m_sustainedCount++;
+        } else {
+            m_lastTopPid = bestProc.pid;
+            m_sustainedCount = 1;
+        }
+
+        int sustainedSec = m_sustainedCount * m_pollIntervalMs / 1000;
+
+        // 检查是否达到持续阈值（0=立即告警）
+        if (m_cpuSustainedThreshold <= 0 || sustainedSec >= m_cpuSustainedThreshold) {
+            bestProc.sustainedSeconds = sustainedSec;
+            m_topProcess = bestProc;
+            qCDebug(edgebarLog) << "CPU alert:" << bestProc.name
+                                << "pid=" << bestProc.pid
+                                << "cpu=" << bestProc.cpuPercent << "%"
+                                << "sustained=" << sustainedSec << "s";
+        } else {
+            // 还未达到持续阈值，不告警但记录日志
+            qCDebug(edgebarLog) << "CPU high but not sustained:"
+                                << bestProc.name
+                                << "sustained=" << sustainedSec << "/"
+                                << m_cpuSustainedThreshold << "s";
+            m_topProcess = ProcessInfo();
+        }
     } else {
+        // CPU 降下来了，重置
+        m_lastTopPid = 0;
+        m_sustainedCount = 0;
         m_topProcess = ProcessInfo();
     }
 }
@@ -428,4 +458,150 @@ bool SystemMonitor::exportCsv(const QString &filePath) const
     qCInfo(edgebarLog) << "CSV exported:" << filePath
                         << "rows:" << m_snapshots.size();
     return true;
+}
+
+// ---------------------------------------------------------------------------
+// readMemPressure: 读取 /proc/pressure/memory（PSI）
+// ---------------------------------------------------------------------------
+//
+// PSI (Pressure Stall Information) 是 Linux 4.20+ 内核提供的压力指标。
+// 文件格式：
+//   some avg10=0.00 avg60=0.00 avg300=0.00 total=0
+//   full avg10=0.00 avg60=0.00 avg300=0.00 total=0
+//
+// some: 至少一个进程在等待内存
+// full: 所有进程都在等待内存
+// avg10: 过去 10 秒的平均压力百分比
+// total: 总停滞时间（微秒）
+//
+// ---------------------------------------------------------------------------
+
+void SystemMonitor::readMemPressure()
+{
+    QFile file(QStringLiteral("/proc/pressure/memory"));
+    if (!file.open(QIODevice::ReadOnly | QIODevice::Text)) {
+        // PSI 不可用（内核版本低或容器环境），重置
+        m_memPressureLevel = MemPressureNone;
+        m_memPressureAvg10 = 0;
+        m_memPressureTotal = 0;
+        return;
+    }
+
+    QString content = QString::fromUtf8(file.readAll());
+    file.close();
+
+    // 解析 "full" 行（所有进程被阻塞，更严重）
+    QRegularExpression reFull(QStringLiteral("full\\s+avg10=([0-9.]+)\\s+avg60=[0-9.]+\\s+avg300=[0-9.]+\\s+total=([0-9]+)"));
+    QRegularExpression reSome(QStringLiteral("some\\s+avg10=([0-9.]+)\\s+avg60=[0-9.]+\\s+avg300=[0-9.]+\\s+total=([0-9]+)"));
+
+    float fullAvg10 = 0;
+    qint64 fullTotal = 0;
+    float someAvg10 = 0;
+
+    auto matchFull = reFull.match(content);
+    if (matchFull.hasMatch()) {
+        fullAvg10 = matchFull.captured(1).toFloat();
+        fullTotal = matchFull.captured(2).toLongLong();
+    }
+
+    auto matchSome = reSome.match(content);
+    if (matchSome.hasMatch()) {
+        someAvg10 = matchSome.captured(1).toFloat();
+    }
+
+    m_memPressureAvg10 = fullAvg10;
+    m_memPressureTotal = fullTotal;
+
+    // 判定压力等级
+    // 阈值策略：full avg10 > 10% 为严重，>0 为压力
+    // 或者 some avg10 > 30% 为部分压力
+    if (fullAvg10 > 10.0f) {
+        m_memPressureLevel = MemPressureCritical;
+    } else if (fullAvg10 > 0.0f) {
+        m_memPressureLevel = MemPressureFull;
+    } else if (someAvg10 > 30.0f) {
+        m_memPressureLevel = MemPressureSome;
+    } else {
+        m_memPressureLevel = MemPressureNone;
+    }
+
+    // 也检查内存使用率阈值
+    if (m_memPressureThreshold > 0 && m_memUsage >= m_memPressureThreshold) {
+        // 如果 PSI 正常但内存使用率超过阈值，也升级为 Some
+        if (m_memPressureLevel < MemPressureSome) {
+            m_memPressureLevel = (m_memUsage >= 90.0f) ? MemPressureCritical : MemPressureSome;
+        }
+    }
+
+    if (m_memPressureLevel >= MemPressureFull) {
+        qCWarning(edgebarLog) << "Memory pressure detected:"
+                              << "full avg10=" << fullAvg10
+                              << "some avg10=" << someAvg10
+                              << "total=" << fullTotal << "us";
+    }
+}
+
+// ---------------------------------------------------------------------------
+// readTopMemProcesses: 扫描 /proc 查找内存占用最高的进程
+// ---------------------------------------------------------------------------
+
+void SystemMonitor::readTopMemProcesses()
+{
+    m_topMemProcesses.clear();
+
+    QDir procDir(QStringLiteral("/proc"));
+    QStringList filters;
+    filters << QStringLiteral("[0-9]*");
+    procDir.setNameFilters(filters);
+    procDir.setFilter(QDir::Dirs);
+
+    QList<MemProcessInfo> allProcs;
+
+    for (const auto &entry : procDir.entryInfoList()) {
+        bool ok;
+        int pid = entry.fileName().toInt(&ok);
+        if (!ok) continue;
+
+        // 读取 /proc/[pid]/status 获取 VmRSS
+        QFile statusFile(QStringLiteral("/proc/%1/status").arg(pid));
+        if (!statusFile.open(QIODevice::ReadOnly | QIODevice::Text))
+            continue;
+
+        QString name;
+        qint64 rss = 0;
+        QTextStream stream(&statusFile);
+        while (!stream.atEnd()) {
+            QString line = stream.readLine();
+            if (line.startsWith(QStringLiteral("Name:"))) {
+                name = line.mid(5).trimmed();
+            } else if (line.startsWith(QStringLiteral("VmRSS:"))) {
+                // VmRSS:   12345 kB
+                QString val = line.section(QRegularExpression(QStringLiteral("\\s+")), 1, 1);
+                rss = val.toLongLong() * 1024;  // kB → bytes
+            }
+        }
+        statusFile.close();
+
+        if (rss > 0) {
+            MemProcessInfo info;
+            info.pid = pid;
+            info.name = name;
+            info.rssBytes = rss;
+            info.memPercent = m_memTotal > 0
+                ? static_cast<float>(rss) * 100 / m_memTotal
+                : 0;
+            allProcs.append(info);
+        }
+    }
+
+    // 按内存占用排序，取前 5
+    std::sort(allProcs.begin(), allProcs.end(),
+              [](const MemProcessInfo &a, const MemProcessInfo &b) {
+                  return a.rssBytes > b.rssBytes;
+              });
+
+    int count = qMin(5, allProcs.size());
+    for (int i = 0; i < count; ++i) {
+        m_topMemProcesses.append(allProcs[i]);
+    }
 }

@@ -3,6 +3,7 @@
 #include "ClipboardWidget.h"
 #include "QuickLaunchWidget.h"
 #include "PomodoroWidget.h"
+#include "HealthReminderWidget.h"
 #include "MiniCountdown.h"
 #include "plugins/AppLauncher.h"
 #include "plugins/SystemCommand.h"
@@ -134,7 +135,7 @@ void MainWindow::applyThemeColors()
     ).arg(normalBg, textColor, checkedBg, checkedText,
          dark ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.05)");
 
-    for (int i = 0; i < 4; ++i) {
+    for (int i = 0; i < 5; ++i) {
         if (m_tabButtons[i])
             m_tabButtons[i]->setStyleSheet(style);
     }
@@ -170,9 +171,10 @@ void MainWindow::setupUI()
         {"edit-paste",               QT_TRANSLATE_NOOP("MainWindow", "剪贴板")},
         {"system-search",            QT_TRANSLATE_NOOP("MainWindow", "启动")},
         {"clock",                    QT_TRANSLATE_NOOP("MainWindow", "专注")},
+        {"preferences-system-health", QT_TRANSLATE_NOOP("MainWindow", "健康")},
     };
 
-    for (int i = 0; i < 4; ++i) {
+    for (int i = 0; i < 5; ++i) {
         auto *btn = new DPushButton(tabBar);
         btn->setIcon(QIcon::fromTheme(QString(tabs[i].iconName)));
         btn->setIconSize(QSize(14, 14));
@@ -193,6 +195,7 @@ void MainWindow::setupUI()
     m_clipboardWidget   = new ClipboardWidget(m_clipboard, m_centralWidget);
     m_quickLaunchWidget = new QuickLaunchWidget(m_centralWidget);
     m_pomodoroWidget    = new PomodoroWidget(m_centralWidget);
+    m_healthWidget      = new HealthReminderWidget(m_centralWidget);
 
     // 注册插件
     m_quickLaunchWidget->registerPlugin(new AppLauncher());
@@ -202,18 +205,21 @@ void MainWindow::setupUI()
     m_clipboardWidget->hide();
     m_quickLaunchWidget->hide();
     m_pomodoroWidget->hide();
+    m_healthWidget->hide();
 
     // Tab 切换
     connect(m_tabButtons[0], &DPushButton::clicked, this, [this]() { setActiveTab(SystemTab); });
     connect(m_tabButtons[1], &DPushButton::clicked, this, [this]() { setActiveTab(ClipboardTab); });
     connect(m_tabButtons[2], &DPushButton::clicked, this, [this]() { setActiveTab(LaunchTab); });
     connect(m_tabButtons[3], &DPushButton::clicked, this, [this]() { setActiveTab(PomodoroTab); });
+    connect(m_tabButtons[4], &DPushButton::clicked, this, [this]() { setActiveTab(HealthTab); });
 
     mainLayout->addWidget(tabBar);
     mainLayout->addWidget(m_sysMonitorWidget, 1);
     mainLayout->addWidget(m_clipboardWidget, 1);
     mainLayout->addWidget(m_quickLaunchWidget, 1);
     mainLayout->addWidget(m_pomodoroWidget, 1);
+    mainLayout->addWidget(m_healthWidget, 1);
 
     setCentralWidget(m_centralWidget);
 }
@@ -301,16 +307,18 @@ void MainWindow::setActiveTab(TabIndex tab)
     m_clipboardWidget->hide();
     m_quickLaunchWidget->hide();
     m_pomodoroWidget->hide();
+    m_healthWidget->hide();
 
     switch (tab) {
     case SystemTab:    m_sysMonitorWidget->show();  break;
     case ClipboardTab: m_clipboardWidget->show();    break;
     case LaunchTab:    m_quickLaunchWidget->show();  break;
     case PomodoroTab:  m_pomodoroWidget->show();     break;
+    case HealthTab:    m_healthWidget->show();       break;
     }
 
     // 更新按钮选中状态
-    for (int i = 0; i < 4; ++i) {
+    for (int i = 0; i < 5; ++i) {
         if (m_tabButtons[i])
             m_tabButtons[i]->setChecked(i == static_cast<int>(tab));
     }
@@ -344,11 +352,11 @@ void MainWindow::keyPressEvent(QKeyEvent *event)
         if (event->modifiers() & Qt::ControlModifier) {
             // Ctrl+Tab: 反向
             setActiveTab(static_cast<TabIndex>(
-                (static_cast<int>(m_currentTab) + 3) % 4));
+                (static_cast<int>(m_currentTab) + 4) % 5));
         } else {
             // Tab: 正向
             setActiveTab(static_cast<TabIndex>(
-                (static_cast<int>(m_currentTab) + 1) % 4));
+                (static_cast<int>(m_currentTab) + 1) % 5));
         }
         break;
     default:

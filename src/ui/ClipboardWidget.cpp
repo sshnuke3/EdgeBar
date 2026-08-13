@@ -11,13 +11,93 @@
 #include <QApplication>
 #include <QMenu>
 #include <QAction>
+#include <QPropertyAnimation>
+#include <QScrollBar>
+#include <QWheelEvent>
+#include <QMouseEvent>
+#include <QScreen>
+#include <QGuiApplication>
 
-// ---- 自定义委托：绘制剪贴板条目（文本 + 图片） ----
+// ---------------------------------------------------------------------------
+// SmoothScrollListView: 平滑滚动列表
+// ---------------------------------------------------------------------------
+//
+// 重写 wheelEvent，用 QPropertyAnimation 动画化 scrollbar 的滑动，
+// 替代默认的"瞬移"行为，减轻视觉疲劳。
+//
+// ---------------------------------------------------------------------------
+
+class SmoothScrollListView : public DListView
+{
+public:
+    explicit SmoothScrollListView(QWidget *parent = nullptr)
+        : DListView(parent)
+    {
+        // 隐藏水平滚动条
+        setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+        // 允许鼠标追踪以实现悬停效果
+        setMouseTracking(true);
+    }
+
+protected:
+    void wheelEvent(QWheelEvent *event) override
+    {
+        if (m_anim && m_anim->state() == QAbstractAnimation::Running) {
+            // 动画进行中，累积增量
+            m_pendingDelta += event->angleDelta().y();
+            event->accept();
+            return;
+        }
+
+        m_pendingDelta = event->angleDelta().y();
+
+        QScrollBar *vbar = verticalScrollBar();
+        if (!vbar) {
+            DListView::wheelEvent(event);
+            return;
+        }
+
+        int currentValue = vbar->value();
+        // 每次滚动 3 个条目的高度（约 120px）
+        int step = 120;
+        int targetValue = currentValue - (m_pendingDelta > 0 ? step : -step);
+        targetValue = qBound(vbar->minimum(), targetValue, vbar->maximum());
+
+        if (targetValue == currentValue) {
+            event->accept();
+            return;
+        }
+
+        if (!m_anim) {
+            m_anim = new QPropertyAnimation(vbar, "value", this);
+            m_anim->setDuration(250);
+            m_anim->setEasingCurve(QEasingCurve::OutCubic);
+        }
+
+        m_anim->stop();
+        m_anim->setStartValue(currentValue);
+        m_anim->setEndValue(targetValue);
+        m_anim->start();
+
+        event->accept();
+    }
+
+private:
+    QPropertyAnimation *m_anim = nullptr;
+    int m_pendingDelta = 0;
+};
+
+// ---------------------------------------------------------------------------
+// ClipItemDelegate: 自定义委托（支持紧凑模式）
+// ---------------------------------------------------------------------------
+
 class ClipItemDelegate : public QStyledItemDelegate
 {
 public:
     explicit ClipItemDelegate(QObject *parent = nullptr)
         : QStyledItemDelegate(parent) {}
+
+    void setCompactMode(bool compact) { m_compact = compact; }
 
     enum DataRole {
         PreviewRole    = Qt::DisplayRole,
@@ -26,6 +106,7 @@ public:
         TypeRole       = Qt::UserRole + 3,   // 0=text, 1=image
         ThumbRole      = Qt::UserRole + 4,   // QPixmap
         LabelRole      = Qt::UserRole + 5,   // "图片 1920×1080"
+        StarRole       = Qt::UserRole + 6,   // 收藏标记
     };
 
     void paint(QPainter *painter, const QStyleOptionViewItem &option,
@@ -50,6 +131,14 @@ public:
             painter->fillPath(path, c);
         }
 
+        // 置顶条目的左侧色条
+        bool pinned = index.data(PinnedRole).toBool();
+        if (pinned) {
+            painter->setPen(Qt::NoPen);
+            painter->setBrush(QColor(245, 167, 38, 200));
+            painter->drawRoundedRect(QRect(rect.left() + 2, rect.top() + 4, 3, rect.height() - 8), 1, 1);
+        }
+
         QColor textColor;
         if (option.state & QStyle::State_Selected)
             textColor = option.palette.color(QPalette::HighlightedText);
@@ -59,20 +148,21 @@ public:
         int type = index.data(TypeRole).toInt();
 
         if (type == 1) {
-            // ---- 图片条目 ----
             drawImageItem(painter, option, index, rect, textColor);
         } else {
-            // ---- 文本条目 ----
             drawTextItem(painter, option, index, rect, textColor);
         }
 
-        // ---- 公共：时间戳 ----
         drawTimestamp(painter, option, index, rect, textColor);
 
-        // ---- 公共：置顶标记 ----
-        bool pinned = index.data(PinnedRole).toBool();
         if (pinned) {
             drawPinMark(painter, rect);
+        }
+
+        // 收藏星标
+        bool starred = index.data(StarRole).toBool();
+        if (starred) {
+            drawStarMark(painter, rect);
         }
 
         painter->restore();
@@ -86,17 +176,32 @@ public:
 
         QString preview = index.data(PreviewRole).toString();
         QFont font = QApplication::font();
-        font.setPointSizeF(font.pointSizeF() * 0.9);
+        font.setPointSizeF(font.pointSizeF() * (m_compact ? 0.82 : 0.9));
         painter->setFont(font);
         painter->setPen(textColor);
 
         QFontMetrics fm(font);
-        QString elided = fm.elidedText(preview, Qt::ElideRight, rect.width() - 24);
+        int leftPad = 12;
+        int rightPad = 52;  // 留出时间戳空间
+        QString elided = fm.elidedText(preview, Qt::ElideRight,
+                                       rect.width() - leftPad - rightPad);
 
-        painter->drawText(QRect(rect.left() + 12, rect.top() + 6,
-                                rect.width() - 24, rect.height() - 12),
-                          Qt::AlignLeft | Qt::AlignTop | Qt::TextWordWrap,
-                          elided);
+        int topPad = m_compact ? 3 : 6;
+        int textH = m_compact ? rect.height() - 6 : rect.height() - 12;
+
+        // 紧凑模式：单行；标准模式：允许换行
+        if (m_compact) {
+            painter->drawText(QRect(rect.left() + leftPad, rect.top() + topPad,
+                                    rect.width() - leftPad - rightPad, textH),
+                              Qt::AlignLeft | Qt::AlignVCenter, elided);
+        } else {
+            // 标准模式：最多 2 行
+            QRect textRect(rect.left() + leftPad, rect.top() + topPad,
+                           rect.width() - leftPad - rightPad, textH);
+            painter->drawText(textRect,
+                              Qt::AlignLeft | Qt::AlignTop | Qt::TextWordWrap,
+                              elided);
+        }
     }
 
     void drawImageItem(QPainter *painter, const QStyleOptionViewItem &option,
@@ -108,13 +213,12 @@ public:
         QPixmap thumb = index.data(ThumbRole).value<QPixmap>();
         QString label = index.data(LabelRole).toString();
 
-        // 缩略图区域：左侧 90x54
-        int thumbW = 90;
-        int thumbH = 54;
+        // 紧凑模式：更小的缩略图
+        int thumbW = m_compact ? 48 : 90;
+        int thumbH = m_compact ? 30 : 54;
         int thumbX = rect.left() + 8;
         int thumbY = rect.top() + (rect.height() - thumbH) / 2;
 
-        // 绘制缩略图边框
         QRectF thumbRect(thumbX, thumbY, thumbW, thumbH);
         QPainterPath borderPath;
         borderPath.addRoundedRect(thumbRect, 4, 4);
@@ -122,7 +226,6 @@ public:
         painter->setBrush(QColor(255, 255, 255, 15));
         painter->drawPath(borderPath);
 
-        // 绘制缩略图（保持比例居中）
         if (!thumb.isNull()) {
             painter->save();
             painter->setClipPath(borderPath);
@@ -135,15 +238,23 @@ public:
             painter->restore();
         }
 
-        // 标签文字：缩略图右侧
         QFont font = QApplication::font();
-        font.setPointSizeF(font.pointSizeF() * 0.9);
+        font.setPointSizeF(font.pointSizeF() * (m_compact ? 0.75 : 0.9));
         painter->setFont(font);
         painter->setPen(textColor);
 
-        painter->drawText(QRect(thumbX + thumbW + 8, thumbY,
-                                rect.width() - thumbW - 32, thumbH),
-                          Qt::AlignLeft | Qt::AlignVCenter, label);
+        // 紧凑模式：标签简化
+        if (m_compact) {
+            // 只显示 "IMG" 标签
+            painter->drawText(QRect(thumbX + thumbW + 6, thumbY,
+                                    rect.width() - thumbW - 60, thumbH),
+                              Qt::AlignLeft | Qt::AlignVCenter,
+                              QStringLiteral("图片"));
+        } else {
+            painter->drawText(QRect(thumbX + thumbW + 8, thumbY,
+                                    rect.width() - thumbW - 32, thumbH),
+                              Qt::AlignLeft | Qt::AlignVCenter, label);
+        }
     }
 
     void drawTimestamp(QPainter *painter, const QStyleOptionViewItem &option,
@@ -159,13 +270,13 @@ public:
         QString timeStr = dt.toString("HH:mm");
 
         QFont smallFont = QApplication::font();
-        smallFont.setPointSizeF(smallFont.pointSizeF() * 0.7);
+        smallFont.setPointSizeF(smallFont.pointSizeF() * (m_compact ? 0.62 : 0.7));
         painter->setFont(smallFont);
 
         QColor subColor = textColor;
         subColor.setAlpha(120);
         painter->setPen(subColor);
-        painter->drawText(QRect(rect.right() - 50, rect.top() + 4, 40, 16),
+        painter->drawText(QRect(rect.right() - 48, rect.top() + 3, 38, 14),
                           Qt::AlignRight | Qt::AlignTop, timeStr);
     }
 
@@ -173,13 +284,34 @@ public:
     {
         QPainterPath pinPath;
         int px = rect.right() - 12;
-        int py = rect.top() + 8;
+        int py = rect.top() + 6;
+        int sz = m_compact ? 6 : 8;
         pinPath.moveTo(px, py);
-        pinPath.lineTo(px + 8, py);
-        pinPath.lineTo(px + 4, py + 8);
+        pinPath.lineTo(px + sz, py);
+        pinPath.lineTo(px + sz / 2, py + sz);
         pinPath.closeSubpath();
         QColor pinColor(245, 167, 38);
         painter->fillPath(pinPath, pinColor);
+    }
+
+    void drawStarMark(QPainter *painter, const QRect &rect) const
+    {
+        // 右下角小星标
+        int sx = rect.right() - 16;
+        int sy = rect.bottom() - 12;
+        QPainterPath starPath;
+        starPath.moveTo(sx, sy - 4);
+        starPath.lineTo(sx + 1, sy - 1);
+        starPath.lineTo(sx + 4, sy - 1);
+        starPath.lineTo(sx + 2, sy + 1);
+        starPath.lineTo(sx + 3, sy + 4);
+        starPath.lineTo(sx, sy + 2);
+        starPath.lineTo(sx - 3, sy + 4);
+        starPath.lineTo(sx - 2, sy + 1);
+        starPath.lineTo(sx - 4, sy - 1);
+        starPath.lineTo(sx - 1, sy - 1);
+        starPath.closeSubpath();
+        painter->fillPath(starPath, QColor(241, 196, 15));
     }
 
     QSize sizeHint(const QStyleOptionViewItem &option,
@@ -187,12 +319,21 @@ public:
     {
         Q_UNUSED(option)
         int type = index.data(TypeRole).toInt();
-        // 图片条目需要更高行高以容纳缩略图
+        if (m_compact) {
+            // 紧凑模式：文本 26px，图片 36px
+            return QSize(250, type == 1 ? 36 : 26);
+        }
+        // 标准模式：文本 48px，图片 66px
         return QSize(250, type == 1 ? 66 : 48);
     }
+
+private:
+    bool m_compact = false;
 };
 
-// ---- ClipboardWidget ----
+// ---------------------------------------------------------------------------
+// ClipboardWidget
+// ---------------------------------------------------------------------------
 
 ClipboardWidget::ClipboardWidget(ClipboardManager *manager, QWidget *parent)
     : DWidget(parent)
@@ -208,26 +349,40 @@ void ClipboardWidget::setupUI()
     layout->setSpacing(4);
     layout->setContentsMargins(6, 6, 6, 6);
 
-    // 搜索框
+    // 搜索栏 + 紧凑按钮
+    auto *searchLayout = new QHBoxLayout;
+    searchLayout->setSpacing(4);
+
     m_searchEdit = new DLineEdit(this);
     m_searchEdit->setPlaceholderText(QStringLiteral("搜索剪贴板…"));
     m_searchEdit->setClearButtonEnabled(true);
     m_searchEdit->setFixedHeight(32);
-    layout->addWidget(m_searchEdit);
+    searchLayout->addWidget(m_searchEdit, 1);
 
-    // 列表
-    m_listView = new DListView(this);
+    // 紧凑模式切换按钮
+    m_compactBtn = new DToolButton(this);
+    m_compactBtn->setText(QStringLiteral("紧凑"));
+    m_compactBtn->setCheckable(true);
+    m_compactBtn->setToolTip(QStringLiteral("切换紧凑/标准显示模式"));
+    m_compactBtn->setFixedSize(40, 32);
+    searchLayout->addWidget(m_compactBtn);
+
+    layout->addLayout(searchLayout);
+
+    // 平滑滚动列表
+    m_listView = new SmoothScrollListView(this);
     m_model = new QStandardItemModel(this);
     m_listView->setModel(m_model);
-    m_listView->setItemDelegate(new ClipItemDelegate(m_listView));
-    // 图片条目高度不同，关闭统一尺寸
+    m_delegate = new ClipItemDelegate(m_listView);
+    m_listView->setItemDelegate(m_delegate);
     m_listView->setUniformItemSizes(false);
     m_listView->setEditTriggers(QAbstractItemView::NoEditTriggers);
     m_listView->setSelectionMode(QAbstractItemView::SingleSelection);
     m_listView->setVerticalScrollBarPolicy(Qt::ScrollBarAsNeeded);
     m_listView->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
-    // 右键菜单
     m_listView->setContextMenuPolicy(Qt::CustomContextMenu);
+    // 启用平滑滚动：设置 ScrollMode 为 PerPixel
+    m_listView->setVerticalScrollMode(QAbstractItemView::ScrollPerPixel);
     layout->addWidget(m_listView, 1);
 
     connect(m_searchEdit, &DLineEdit::textChanged,
@@ -236,10 +391,30 @@ void ClipboardWidget::setupUI()
             this, &ClipboardWidget::onItemClicked);
     connect(m_listView, &DListView::customContextMenuRequested,
             this, &ClipboardWidget::onContextMenu);
-
-    // 连接数据变化
+    connect(m_compactBtn, &DToolButton::clicked,
+            this, &ClipboardWidget::onCompactToggled);
     connect(m_manager, &ClipboardManager::historyChanged,
             this, &ClipboardWidget::onHistoryChanged);
+}
+
+void ClipboardWidget::setCompactMode(bool compact)
+{
+    if (m_compactMode == compact) return;
+    m_compactMode = compact;
+    m_compactBtn->setChecked(compact);
+
+    // 更新委托
+    if (m_delegate) {
+        m_delegate->setCompactMode(compact);
+    }
+
+    // 刷新列表以更新行高
+    refreshList(m_currentItems);
+}
+
+void ClipboardWidget::onCompactToggled()
+{
+    setCompactMode(m_compactBtn->isChecked());
 }
 
 void ClipboardWidget::onHistoryChanged()
@@ -264,17 +439,46 @@ void ClipboardWidget::refreshList(const QList<ClipboardManager::ClipItem> &items
     m_currentItems = items;
     m_model->clear();
 
+    // 分离 pinned 和普通条目
+    QList<ClipboardManager::ClipItem> pinnedItems;
+    QList<ClipboardManager::ClipItem> normalItems;
     for (const auto &item : items) {
+        if (item.pinned)
+            pinnedItems.append(item);
+        else
+            normalItems.append(item);
+    }
+
+    // 先添加 pinned 条目
+    for (const auto &item : pinnedItems) {
         auto *stdItem = new QStandardItem;
 
         if (item.type == ClipboardManager::ImageClip) {
-            // 图片条目
             stdItem->setText(item.imageLabel);
             stdItem->setData(1, ClipItemDelegate::TypeRole);
             stdItem->setData(item.thumbnail, ClipItemDelegate::ThumbRole);
             stdItem->setData(item.imageLabel, ClipItemDelegate::LabelRole);
         } else {
-            // 文本条目
+            stdItem->setText(item.preview);
+            stdItem->setData(0, ClipItemDelegate::TypeRole);
+        }
+
+        stdItem->setData(item.pinned, ClipItemDelegate::PinnedRole);
+        stdItem->setData(item.timestamp, ClipItemDelegate::TimestampRole);
+        stdItem->setEditable(false);
+        m_model->appendRow(stdItem);
+    }
+
+    // 再添加普通条目
+    for (const auto &item : normalItems) {
+        auto *stdItem = new QStandardItem;
+
+        if (item.type == ClipboardManager::ImageClip) {
+            stdItem->setText(item.imageLabel);
+            stdItem->setData(1, ClipItemDelegate::TypeRole);
+            stdItem->setData(item.thumbnail, ClipItemDelegate::ThumbRole);
+            stdItem->setData(item.imageLabel, ClipItemDelegate::LabelRole);
+        } else {
             stdItem->setText(item.preview);
             stdItem->setData(0, ClipItemDelegate::TypeRole);
         }
@@ -310,11 +514,15 @@ void ClipboardWidget::onContextMenu(const QPoint &pos)
         item.pinned ? QStringLiteral("取消置顶") : QStringLiteral("置顶"));
     menu.addSeparator();
     QAction *delAct = menu.addAction(QStringLiteral("删除"));
+    menu.addSeparator();
+    QAction *copyAct = menu.addAction(QStringLiteral("复制内容"));
 
     QAction *ret = menu.exec(m_listView->viewport()->mapToGlobal(pos));
     if (ret == pinAct) {
         m_manager->togglePin(item.id);
     } else if (ret == delAct) {
         m_manager->remove(item.id);
+    } else if (ret == copyAct) {
+        m_manager->copyToClipboard(item.id);
     }
 }
