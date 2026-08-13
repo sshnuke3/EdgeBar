@@ -14,9 +14,10 @@ DWIDGET_USE_NAMESPACE
  * @brief 剪贴板历史界面
  *
  * 搜索框 + 历史列表
- * 每条显示预览文本 + 时间
+ * 文本条目：显示预览文本 + 时间
+ * 图片条目：显示缩略图 + 尺寸标签 + 时间
  * 点击复制到剪贴板
- * 支持置顶/删除
+ * 支持置顶/删除（右键菜单）
  */
 class ClipboardWidget : public DWidget
 {
@@ -28,6 +29,7 @@ private slots:
     void onHistoryChanged();
     void onSearchChanged(const QString &text);
     void onItemClicked(const QModelIndex &index);
+    void onContextMenu(const QPoint &pos);
 
 private:
     void setupUI();

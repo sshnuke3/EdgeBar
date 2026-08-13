@@ -3,6 +3,7 @@
 #include "ClipboardWidget.h"
 #include "QuickLaunchWidget.h"
 #include "PomodoroWidget.h"
+#include "MiniCountdown.h"
 #include "plugins/AppLauncher.h"
 #include "plugins/SystemCommand.h"
 #include "core/Logging.h"
@@ -37,6 +38,7 @@ MainWindow::MainWindow(QWidget *parent)
     setupUI();
     setupWindow();
     setupEdgeTimer();
+    setupMiniCountdown();
     loadConfig();
     applyThemeColors();
 
@@ -81,11 +83,32 @@ void MainWindow::loadConfig()
     int maxItems = m_config->value("maxClipboardItems", 50).toInt();
     m_clipboard->setMaxItems(qBound(5, maxItems, 200));
 
+    // 剪贴板图片历史开关
+    bool enableImages = m_config->value("enableClipboardImages", true).toBool();
+    m_clipboard->setEnableImages(enableImages);
+
+    // 网速单位：byte (KB/s) 或 bit (kbps)
+    QString netUnit = m_config->value("netSpeedUnit", "byte").toString();
+    m_sysMonitorWidget->setUseByteUnit(netUnit != "bit");
+
+    // CPU 告警阈值
+    int cpuThreshold = m_config->value("cpuAlertThreshold", 80).toInt();
+    m_sysMonitor->setCpuAlertThreshold(qBound(0, cpuThreshold, 100));
+
+    // 流量预警阈值
+    int trafficMB = m_config->value("trafficThresholdMB", 0).toInt();
+    m_sysMonitor->setTrafficThresholdMB(qBound(0, trafficMB, 100000));
+    m_sysMonitorWidget->setTrafficThresholdMB(qBound(0, trafficMB, 100000));
+
     qCInfo(edgebarLog) << "Config loaded:"
                        << "edge=" << edgeSide
                        << "autoHide=" << autoHide
                        << "interval=" << interval
-                       << "maxItems=" << maxItems;
+                       << "maxItems=" << maxItems
+                       << "images=" << enableImages
+                       << "netUnit=" << netUnit
+                       << "cpuThreshold=" << cpuThreshold
+                       << "trafficMB=" << trafficMB;
 }
 
 // ---------------------------------------------------------------------------
@@ -228,6 +251,35 @@ void MainWindow::setupEdgeTimer()
     m_slideAnim->setEasingCurve(QEasingCurve::OutCubic);
 }
 
+// ---------------------------------------------------------------------------
+// setupMiniCountdown: 初始化番茄钟迷你浮窗
+// ---------------------------------------------------------------------------
+
+void MainWindow::setupMiniCountdown()
+{
+    m_miniCountdown = new MiniCountdown();
+    m_miniCountdown->hide();
+
+    connect(m_miniCountdown, &MiniCountdown::clicked,
+            this, &MainWindow::onMiniCountdownClicked);
+
+    // 定时更新倒计时显示
+    QTimer *miniTimer = new QTimer(this);
+    miniTimer->setInterval(1000);
+    connect(miniTimer, &QTimer::timeout, this, [this]() {
+        if (!m_miniCountdown || !m_miniCountdown->isVisible() || !m_pomodoroWidget)
+            return;
+        m_miniCountdown->setRemaining(m_pomodoroWidget->remaining());
+        m_miniCountdown->setBreakMode(m_pomodoroWidget->isBreak());
+    });
+    miniTimer->start();
+}
+
+void MainWindow::onMiniCountdownClicked()
+{
+    slideIn();
+}
+
 void MainWindow::setEdgeSide(EdgeSide side)
 {
     m_edgeSide = side;
@@ -330,6 +382,8 @@ void MainWindow::slideIn()
     m_slideAnim->setStartValue(pos());
     m_slideAnim->setEndValue(shownPosition());
     m_slideAnim->start();
+    // 面板滑入时隐藏迷你倒计时
+    if (m_miniCountdown) m_miniCountdown->hide();
 }
 
 void MainWindow::slideOut()
@@ -339,6 +393,17 @@ void MainWindow::slideOut()
     m_slideAnim->setStartValue(pos());
     m_slideAnim->setEndValue(hiddenPosition());
     m_slideAnim->start();
+    // 面板滑出时显示迷你倒计时（仅番茄钟运行时）
+    // 简化方案：总是显示，由 PomodoroWidget 更新内容
+    if (m_miniCountdown && m_currentTab == PomodoroTab) {
+        QRect sg = screenGeometry();
+        if (m_edgeSide == RightEdge) {
+            m_miniCountdown->move(sg.right() - 28, sg.center().y() - 25);
+        } else {
+            m_miniCountdown->move(4, sg.center().y() - 25);
+        }
+        m_miniCountdown->show();
+    }
 }
 
 QRect MainWindow::screenGeometry() const

@@ -33,6 +33,38 @@
             "description": "Maximum clipboard history items",
             "permissions": "readwrite",
             "visibility": "public"
+        },
+        "enableClipboardImages": {
+            "value": true,
+            "serial": 0,
+            "name": "剪贴板图片历史",
+            "description": "Enable clipboard image history (screenshots, copied images)",
+            "permissions": "readwrite",
+            "visibility": "public"
+        },
+        "netSpeedUnit": {
+            "value": "byte",
+            "serial": 0,
+            "name": "网速单位",
+            "description": "Network speed unit: byte (KB/s) or bit (kbps)",
+            "permissions": "readwrite",
+            "visibility": "public"
+        },
+        "cpuAlertThreshold": {
+            "value": 80,
+            "serial": 0,
+            "name": "CPU告警阈值",
+            "description": "CPU usage percentage threshold for process alert (0=disabled)",
+            "permissions": "readwrite",
+            "visibility": "public"
+        },
+        "trafficThresholdMB": {
+            "value": 0,
+            "serial": 0,
+            "name": "流量预警阈值",
+            "description": "Daily traffic threshold in MB for alert (0=disabled)",
+            "permissions": "readwrite",
+            "visibility": "public"
         }
     }
 }

@@ -18,6 +18,7 @@ class SystemMonitorWidget;
 class ClipboardWidget;
 class QuickLaunchWidget;
 class PomodoroWidget;
+class MiniCountdown;
 
 /**
  * @brief 桌边栏主窗口
@@ -52,11 +53,13 @@ protected:
 
 private slots:
     void checkMousePosition();
+    void onMiniCountdownClicked();
 
 private:
     void setupUI();
     void setupWindow();
     void setupEdgeTimer();
+    void setupMiniCountdown();
     void loadConfig();
     void applyThemeColors();
 
@@ -73,6 +76,7 @@ private:
     ClipboardWidget      *m_clipboardWidget = nullptr;
     QuickLaunchWidget    *m_quickLaunchWidget = nullptr;
     PomodoroWidget       *m_pomodoroWidget = nullptr;
+    MiniCountdown        *m_miniCountdown = nullptr;
 
     // 核心数据
     SystemMonitor    *m_sysMonitor = nullptr;

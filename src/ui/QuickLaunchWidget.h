@@ -13,6 +13,7 @@ DWIDGET_USE_NAMESPACE
  * @brief 快速启动界面
  *
  * 搜索框 + 结果列表，复用 GlobalLauncher 的插件架构
+ * 右键空白区域弹出系统快捷操作菜单（锁屏/注销/挂起/亮度）
  */
 class QuickLaunchWidget : public DWidget
 {
@@ -25,10 +26,12 @@ public:
 private slots:
     void onSearchChanged(const QString &text);
     void onItemClicked(const QModelIndex &index);
+    void onContextMenu(const QPoint &pos);
 
 private:
     void setupUI();
     void performSearch(const QString &query);
+    void executeSystemAction(const QString &action);
 
     DLineEdit          *m_searchEdit = nullptr;
     DListView          *m_resultList = nullptr;

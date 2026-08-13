@@ -17,6 +17,16 @@ set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -Wextra -Wno-unused-parameter -Wno
 find_package(QT NAMES Qt6 Qt5 REQUIRED COMPONENTS Core)
 find_package(Qt${QT_VERSION_MAJOR} REQUIRED COMPONENTS Core Widgets Network)
 
+# 测试框架（可选）
+find_package(Qt${QT_VERSION_MAJOR}Test QUIET)
+if(Qt${QT_VERSION_MAJOR}Test_FOUND)
+    set(TEST_ENABLED TRUE)
+    enable_testing()
+    message(STATUS "Qt Test found, enabling unit tests")
+else()
+    message(STATUS "Qt Test not found, skipping unit tests")
+endif()
+
 # 翻译工具（可选）
 find_package(Qt${QT_VERSION_MAJOR}LinguistTools QUIET)
 if(Qt${QT_VERSION_MAJOR}LinguistTools_FOUND)
@@ -68,6 +78,7 @@ set(SOURCES
     src/ui/ClipboardWidget.cpp
     src/ui/QuickLaunchWidget.cpp
     src/ui/PomodoroWidget.cpp
+    src/ui/MiniCountdown.cpp
 )
 
 # ---- 可执行目标 ----
@@ -95,3 +106,47 @@ if(LINGUIST_FOUND AND QM_FILES)
     install(FILES ${QM_FILES} DESTINATION share/edgebar/translations)
 endif()
 install(FILES translations/edgebar_zh_CN.ts DESTINATION share/edgebar/translations)
+
+# ---- 单元测试 ----
+if(TEST_ENABLED)
+    # 核心库源文件（不含 main.cpp）
+    set(CORE_SOURCES
+        src/core/Logging.cpp
+        src/core/SystemMonitor.cpp
+        src/core/ClipboardManager.cpp
+        src/core/SearchEngine.cpp
+        src/plugins/AppLauncher.cpp
+        src/plugins/SystemCommand.cpp
+    )
+
+    # SearchEngine 测试
+    add_executable(test_searchengine tests/test_searchengine.cpp ${CORE_SOURCES})
+    target_include_directories(test_searchengine PRIVATE src src/core src/plugins src/ui)
+    target_link_libraries(test_searchengine PRIVATE
+        Qt${QT_VERSION_MAJOR}::Core
+        Qt${QT_VERSION_MAJOR}::Test
+        ${DTK_LIBS}
+    )
+    add_test(NAME searchengine COMMAND test_searchengine)
+
+    # ClipboardManager 测试
+    add_executable(test_clipboardmanager tests/test_clipboardmanager.cpp ${CORE_SOURCES})
+    target_include_directories(test_clipboardmanager PRIVATE src src/core src/plugins src/ui)
+    target_link_libraries(test_clipboardmanager PRIVATE
+        Qt${QT_VERSION_MAJOR}::Core
+        Qt${QT_VERSION_MAJOR}::Widgets
+        Qt${QT_VERSION_MAJOR}::Test
+        ${DTK_LIBS}
+    )
+    add_test(NAME clipboardmanager COMMAND test_clipboardmanager)
+
+    # SystemMonitor 测试
+    add_executable(test_systemmonitor tests/test_systemmonitor.cpp ${CORE_SOURCES})
+    target_include_directories(test_systemmonitor PRIVATE src src/core src/plugins src/ui)
+    target_link_libraries(test_systemmonitor PRIVATE
+        Qt${QT_VERSION_MAJOR}::Core
+        Qt${QT_VERSION_MAJOR}::Test
+        ${DTK_LIBS}
+    )
+    add_test(NAME systemmonitor COMMAND test_systemmonitor)
+endif()
