@@ -26,8 +26,8 @@ int main(int argc, char *argv[])
     // 翻译
     app.loadTranslator();
 
-    // 单实例
-    if (!app.setSingleInstance("org.deepin.edgebar")) {
+    // 单实例（key 与 DConfig appId 保持一致）
+    if (!app.setSingleInstance(kEdgeBarAppId)) {
         qCWarning(edgebarLog) << "EdgeBar is already running";
         return 0;
     }

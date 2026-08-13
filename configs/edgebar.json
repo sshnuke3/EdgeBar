@@ -1,5 +1,5 @@
 {
-    "magic": "dsg.config",
+    "magic": "dsg.config.meta",
     "version": "1.0",
     "contents": {
         "edgeSide": {
@@ -103,6 +103,22 @@
             "serial": 0,
             "name": "开机自启动",
             "description": "Start EdgeBar automatically on login",
+            "permissions": "readwrite",
+            "visibility": "public"
+        },
+        "darkWallpaper": {
+            "value": "",
+            "serial": 0,
+            "name": "深色主题壁纸",
+            "description": "Wallpaper path used in dark theme (auto switch on theme change)",
+            "permissions": "readwrite",
+            "visibility": "public"
+        },
+        "lightWallpaper": {
+            "value": "",
+            "serial": 0,
+            "name": "浅色主题壁纸",
+            "description": "Wallpaper path used in light theme (auto switch on theme change)",
             "permissions": "readwrite",
             "visibility": "public"
         },

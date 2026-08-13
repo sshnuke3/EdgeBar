@@ -73,7 +73,10 @@ MainWindow::~MainWindow() = default;
 
 void MainWindow::loadConfig()
 {
-    m_config = new DConfig(QStringLiteral("edgebar"), QString(), this);
+    // 显式指定 appId（org.deepin.edgebar），与 meta 文件安装路径
+    // share/dsg/configs/org.deepin.edgebar/edgebar.json 保持一致。
+    m_config = DConfig::create(QString::fromLatin1(kEdgeBarAppId),
+                               QStringLiteral("edgebar"), QString(), this);
 
     if (!m_config->isValid()) {
         qCWarning(edgebarLog) << "DConfig not available, using defaults";

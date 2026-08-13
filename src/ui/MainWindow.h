@@ -18,6 +18,9 @@ class AutostartManager;
 
 DWIDGET_USE_NAMESPACE
 
+// EdgeBar 应用唯一 ID：用于 DConfig appId、单实例 key，须与安装路径保持一致
+inline constexpr const char *kEdgeBarAppId = "org.deepin.edgebar";
+
 class SystemMonitorWidget;
 class ClipboardWidget;
 class QuickLaunchWidget;

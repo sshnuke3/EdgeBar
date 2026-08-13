@@ -106,7 +106,7 @@ target_link_libraries(edgebar PRIVATE
 # ---- 安装 ----
 install(TARGETS edgebar DESTINATION bin)
 install(FILES edgebar.desktop DESTINATION share/applications)
-install(FILES configs/edgebar.json DESTINATION share/dsg/configs/)
+install(FILES configs/edgebar.json DESTINATION share/dsg/configs/org.deepin.edgebar/)
 if(LINGUIST_FOUND AND QM_FILES)
     install(FILES ${QM_FILES} DESTINATION share/edgebar/translations)
 endif()
