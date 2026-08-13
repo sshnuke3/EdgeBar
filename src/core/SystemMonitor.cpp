@@ -23,7 +23,7 @@ SystemMonitor::SystemMonitor(QObject *parent)
 
 void SystemMonitor::start(int intervalMs)
 {
-    connect(&m_timer, &QTimer::timeout, this, &SystemMonitor::poll);
+    connect(&m_timer, &QTimer::timeout, this, &SystemMonitor::poll, Qt::UniqueConnection);
     m_timer.start(intervalMs);
 }
 
