@@ -134,6 +134,13 @@ public:
 signals:
     void statsUpdated();
 
+    /// CPU 持续高占用告警
+    void cpuAlert(const QString &processName, double cpuPercent, int sustainedSeconds);
+    /// 内存压力告警
+    void memPressureAlert(int level, float avg10);
+    /// 流量超额告警
+    void trafficAlert(qint64 totalMB);
+
 private slots:
     void poll();
 

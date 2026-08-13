@@ -189,6 +189,27 @@ void HealthReminderWidget::setupUI()
 void HealthReminderWidget::onTick()
 {
     resetDailyIfNeeded();
+
+    // 检查喝水提醒
+    QDateTime now = QDateTime::currentDateTime();
+    if (m_lastDrinkTime.isValid()) {
+        qint64 waterElapsed = m_lastDrinkTime.secsTo(now);
+        qint64 waterTotal = static_cast<qint64>(m_waterIntervalMin) * 60;
+        // 在间隔到达时触发一次通知（避免重复：只在整分钟边界触发）
+        if (waterElapsed >= waterTotal && waterElapsed < waterTotal + 2) {
+            emit waterReminder();
+        }
+    }
+
+    // 检查久坐提醒
+    if (m_lastStandTime.isValid()) {
+        qint64 standElapsed = m_lastStandTime.secsTo(now);
+        qint64 standTotal = static_cast<qint64>(m_standIntervalMin) * 60;
+        if (standElapsed >= standTotal && standElapsed < standTotal + 2) {
+            emit standReminder();
+        }
+    }
+
     update();
 }
 

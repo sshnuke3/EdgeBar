@@ -30,8 +30,19 @@ class HealthReminderWidget : public DWidget
 public:
     explicit HealthReminderWidget(QWidget *parent = nullptr);
 
+    /// 设置喝水间隔（从 DConfig 加载）
+    void setWaterInterval(int minutes) { m_waterIntervalMin = minutes; }
+    /// 设置久坐间隔（从 DConfig 加载）
+    void setStandInterval(int minutes) { m_standIntervalMin = minutes; }
+
 protected:
     void paintEvent(QPaintEvent *event) override;
+
+signals:
+    /// 喝水提醒触发
+    void waterReminder();
+    /// 久坐提醒触发
+    void standReminder();
 
 private slots:
     void onTick();
@@ -42,6 +53,8 @@ private slots:
 
 private:
     void setupUI();
+
+    friend class NotificationManager;
 
     // 喝水提醒
     int m_waterIntervalMin = 45;       // 喝水间隔（分钟）

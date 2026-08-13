@@ -29,6 +29,10 @@ public:
     /// 是否为休息模式
     bool isBreak() const { return m_isBreak; }
 
+signals:
+    /// 专注或休息结束时触发（isBreak=true 表示刚结束休息进入专注）
+    void sessionComplete(bool isBreak);
+
 protected:
     void paintEvent(QPaintEvent *event) override;
 

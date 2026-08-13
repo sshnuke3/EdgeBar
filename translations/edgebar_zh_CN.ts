@@ -2,6 +2,13 @@
 <!DOCTYPE TS>
 <TS version="2.1" language="zh_CN" sourcelanguage="en">
 <context>
+    <name>ClipboardWidget</name>
+    <message>
+        <source>搜索剪贴板…</source>
+        <translation type="vanished">搜索剪贴板…</translation>
+    </message>
+</context>
+<context>
     <name>MainWindow</name>
     <message>
         <source>监控</source>
@@ -19,19 +26,16 @@
         <source>专注</source>
         <translation>专注</translation>
     </message>
-</context>
-<context>
-    <name>ClipboardWidget</name>
     <message>
-        <source>搜索剪贴板…</source>
-        <translation>搜索剪贴板…</translation>
+        <source>健康</source>
+        <translation>健康</translation>
     </message>
 </context>
 <context>
     <name>QuickLaunchWidget</name>
     <message>
         <source>搜索应用或命令…</source>
-        <translation>搜索应用或命令…</translation>
+        <translation type="vanished">搜索应用或命令…</translation>
     </message>
 </context>
 </TS>

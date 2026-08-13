@@ -65,6 +65,62 @@
             "description": "Daily traffic threshold in MB for alert (0=disabled)",
             "permissions": "readwrite",
             "visibility": "public"
+        },
+        "cpuSustainedSeconds": {
+            "value": 10,
+            "serial": 0,
+            "name": "CPU持续告警秒数",
+            "description": "Seconds of sustained high CPU before alert (0=immediate)",
+            "permissions": "readwrite",
+            "visibility": "public"
+        },
+        "memPressureThreshold": {
+            "value": 85,
+            "serial": 0,
+            "name": "内存压力阈值",
+            "description": "Memory usage percentage for pressure alert (0=disabled)",
+            "permissions": "readwrite",
+            "visibility": "public"
+        },
+        "notificationsEnabled": {
+            "value": true,
+            "serial": 0,
+            "name": "桌面通知",
+            "description": "Enable desktop notifications for alerts and reminders",
+            "permissions": "readwrite",
+            "visibility": "public"
+        },
+        "soundEnabled": {
+            "value": true,
+            "serial": 0,
+            "name": "通知音效",
+            "description": "Play system sound effect when notification is shown",
+            "permissions": "readwrite",
+            "visibility": "public"
+        },
+        "autostartEnabled": {
+            "value": false,
+            "serial": 0,
+            "name": "开机自启动",
+            "description": "Start EdgeBar automatically on login",
+            "permissions": "readwrite",
+            "visibility": "public"
+        },
+        "waterIntervalMin": {
+            "value": 45,
+            "serial": 0,
+            "name": "喝水提醒间隔",
+            "description": "Water reminder interval in minutes (30/45/60)",
+            "permissions": "readwrite",
+            "visibility": "public"
+        },
+        "standIntervalMin": {
+            "value": 60,
+            "serial": 0,
+            "name": "久坐提醒间隔",
+            "description": "Stand up reminder interval in minutes (45/60/90)",
+            "permissions": "readwrite",
+            "visibility": "public"
         }
     }
 }

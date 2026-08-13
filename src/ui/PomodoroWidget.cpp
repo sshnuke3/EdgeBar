@@ -158,6 +158,7 @@ void PomodoroWidget::onTick()
             m_focusCount++;
             m_lockedTask.clear();
             m_taskEdit->setEnabled(true);
+            emit sessionComplete(true);
         } else {
             // 专注结束 → 记录 session
             m_history.append({m_lockedTask, QDateTime::currentSecsSinceEpoch()});
@@ -171,6 +172,7 @@ void PomodoroWidget::onTick()
                            ? 15 * 60 : 5 * 60;
             m_remaining = m_totalSeconds;
             m_taskEdit->setEnabled(true);
+            emit sessionComplete(false);
         }
     }
     update();

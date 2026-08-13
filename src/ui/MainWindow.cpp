@@ -18,6 +18,8 @@
 #include <DDBusSender>
 
 #include "core/IconHelper.h"
+#include "core/NotificationManager.h"
+#include "core/AutostartManager.h"
 
 #include <QScreen>
 #include <QGuiApplication>
@@ -50,6 +52,8 @@ MainWindow::MainWindow(QWidget *parent)
     setupGlobalShortcuts();
     loadConfig();
     applyThemeColors();
+    setupNotificationManager();
+    setupAutostart();
 
     // 主题变化时重新着色
     connect(DGuiApplicationHelper::instance(),
@@ -110,6 +114,21 @@ void MainWindow::loadConfig()
     m_sysMonitor->setTrafficThresholdMB(qBound(0, trafficMB, 100000));
     m_sysMonitorWidget->setTrafficThresholdMB(qBound(0, trafficMB, 100000));
 
+    // CPU 持续告警秒数
+    int cpuSustained = m_config->value("cpuSustainedSeconds", 10).toInt();
+    m_sysMonitor->setCpuSustainedSeconds(qBound(0, cpuSustained, 300));
+
+    // 内存压力阈值
+    int memThreshold = m_config->value("memPressureThreshold", 85).toInt();
+    m_sysMonitor->setMemPressureThreshold(qBound(0, memThreshold, 100));
+
+    // 健康提醒间隔
+    int waterInterval = m_config->value("waterIntervalMin", 45).toInt();
+    m_healthWidget->setWaterInterval(qBound(15, waterInterval, 180));
+
+    int standInterval = m_config->value("standIntervalMin", 60).toInt();
+    m_healthWidget->setStandInterval(qBound(15, standInterval, 240));
+
     qCInfo(edgebarLog) << "Config loaded:"
                        << "edge=" << edgeSide
                        << "autoHide=" << autoHide
@@ -118,7 +137,11 @@ void MainWindow::loadConfig()
                        << "images=" << enableImages
                        << "netUnit=" << netUnit
                        << "cpuThreshold=" << cpuThreshold
-                       << "trafficMB=" << trafficMB;
+                       << "cpuSustained=" << cpuSustained
+                       << "memThreshold=" << memThreshold
+                       << "trafficMB=" << trafficMB
+                       << "waterInterval=" << waterInterval
+                       << "standInterval=" << standInterval;
 }
 
 // ---------------------------------------------------------------------------
@@ -407,6 +430,48 @@ void MainWindow::setupGlobalShortcuts()
                 setActiveTab(static_cast<TabIndex>(i));
             }
         });
+    }
+}
+
+// ---------------------------------------------------------------------------
+// setupNotificationManager: 初始化桌面通知管理器
+// ---------------------------------------------------------------------------
+
+void MainWindow::setupNotificationManager()
+{
+    m_notifier = new NotificationManager(this);
+
+    // 从 DConfig 读取通知开关
+    if (m_config && m_config->isValid()) {
+        bool notifyEnabled = m_config->value("notificationsEnabled", true).toBool();
+        bool soundEnabled = m_config->value("soundEnabled", true).toBool();
+        m_notifier->setEnabled(notifyEnabled);
+        m_notifier->setSoundEnabled(soundEnabled);
+    }
+
+    // 连接信号源
+    m_notifier->connectSystemMonitor(m_sysMonitor);
+    m_notifier->connectHealthReminder(m_healthWidget);
+    m_notifier->connectPomodoro(m_pomodoroWidget);
+}
+
+// ---------------------------------------------------------------------------
+// setupAutostart: 初始化开机自启动
+// ---------------------------------------------------------------------------
+
+void MainWindow::setupAutostart()
+{
+    m_autostart = new AutostartManager(this);
+
+    if (m_config && m_config->isValid()) {
+        bool autostartEnabled = m_config->value("autostartEnabled", false).toBool();
+
+        // 同步 DConfig 设置与实际 .desktop 文件
+        if (autostartEnabled && !m_autostart->isEnabled()) {
+            m_autostart->enable();
+        } else if (!autostartEnabled && m_autostart->isEnabled()) {
+            m_autostart->disable();
+        }
     }
 }
 

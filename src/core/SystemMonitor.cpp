@@ -62,6 +62,16 @@ void SystemMonitor::poll()
         qint64 dtSec = 2;  // 近似间隔
         m_dailyRxBytes += static_cast<qint64>(m_netDownload * 1024 * dtSec);
         m_dailyTxBytes += static_cast<qint64>(m_netUpload * 1024 * dtSec);
+
+        // 流量超额告警（仅首次触发）
+        if (m_trafficThresholdMB > 0) {
+            qint64 totalMB = (m_dailyRxBytes + m_dailyTxBytes) / (1024 * 1024);
+            qint64 prevTotalMB = (totalMB - static_cast<qint64>(
+                (m_netDownload + m_netUpload) * 1024 * dtSec / (1024 * 1024)));
+            if (totalMB >= m_trafficThresholdMB && prevTotalMB < m_trafficThresholdMB) {
+                emit trafficAlert(totalMB);
+            }
+        }
     }
 
     // 记录快照
@@ -412,6 +422,11 @@ void SystemMonitor::readTopProcess()
                                 << "pid=" << bestProc.pid
                                 << "cpu=" << bestProc.cpuPercent << "%"
                                 << "sustained=" << sustainedSec << "s";
+            // 仅在首次触发时发信号（sustainedCount == 1 对应首次达到阈值）
+            if (m_sustainedCount == 1 ||
+                (m_cpuSustainedThreshold <= 0 && m_sustainedCount == 1)) {
+                emit cpuAlert(bestProc.name, bestProc.cpuPercent, sustainedSec);
+            }
         } else {
             // 还未达到持续阈值，不告警但记录日志
             qCDebug(edgebarLog) << "CPU high but not sustained:"
@@ -538,6 +553,8 @@ void SystemMonitor::readMemPressure()
                               << "full avg10=" << fullAvg10
                               << "some avg10=" << someAvg10
                               << "total=" << fullTotal << "us";
+        emit memPressureAlert(static_cast<int>(m_memPressureLevel),
+                              fullAvg10 > 0 ? fullAvg10 : someAvg10);
     }
 }
 

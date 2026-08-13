@@ -71,6 +71,8 @@ set(SOURCES
     src/core/SystemMonitor.cpp
     src/core/ClipboardManager.cpp
     src/core/SearchEngine.cpp
+    src/core/NotificationManager.cpp
+    src/core/AutostartManager.cpp
     src/plugins/AppLauncher.cpp
     src/plugins/SystemCommand.cpp
     src/ui/MainWindow.cpp
@@ -113,6 +115,8 @@ install(FILES translations/edgebar_zh_CN.ts DESTINATION share/edgebar/translatio
 # ---- 单元测试 ----
 if(TEST_ENABLED)
     # 核心库源文件（不含 main.cpp）
+    # 核心库源文件（不含 main.cpp，不含 NotificationManager/AutostartManager
+    # 因为后者依赖 Qt DBus，测试目标无需链接）
     set(CORE_SOURCES
         src/core/Logging.cpp
         src/core/SystemMonitor.cpp

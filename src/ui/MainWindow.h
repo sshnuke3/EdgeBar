@@ -12,6 +12,10 @@
 #include "core/SystemMonitor.h"
 #include "core/ClipboardManager.h"
 
+// 前向声明
+class NotificationManager;
+class AutostartManager;
+
 DWIDGET_USE_NAMESPACE
 
 class SystemMonitorWidget;
@@ -64,6 +68,8 @@ private:
     void setupMiniCountdown();
     void setupDesktopWidget();
     void setupGlobalShortcuts();
+    void setupNotificationManager();
+    void setupAutostart();
     void loadConfig();
     void applyThemeColors();
     void applyWallpaperForTheme();
@@ -89,6 +95,8 @@ private:
     SystemMonitor    *m_sysMonitor = nullptr;
     ClipboardManager *m_clipboard = nullptr;
     Dtk::Core::DConfig *m_config = nullptr;
+    NotificationManager *m_notifier = nullptr;
+    AutostartManager   *m_autostart = nullptr;
 
     // Tab 按钮
     DPushButton *m_tabButtons[5] = {nullptr};
