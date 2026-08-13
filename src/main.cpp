@@ -1,10 +1,9 @@
 #include <DApplication>
 #include <DLog>
 
-#include <QIcon>
-
 #include "ui/MainWindow.h"
 #include "core/Logging.h"
+#include "core/IconHelper.h"
 
 DCORE_USE_NAMESPACE
 DWIDGET_USE_NAMESPACE
@@ -16,7 +15,7 @@ int main(int argc, char *argv[])
     app.setOrganizationName("deepin");
     app.setApplicationVersion("1.0.0");
     app.setProductName(QStringLiteral("桌边栏 EdgeBar"));
-    app.setProductIcon(QIcon::fromTheme("sidebar"));
+    app.setProductIcon(edgebarFindIcon("sidebar"));
     app.setApplicationDescription(
         QStringLiteral("屏幕边缘滑出的智能面板：系统监控、剪贴板、快速启动、番茄钟。"));
     app.setApplicationLicense("GPLv3");

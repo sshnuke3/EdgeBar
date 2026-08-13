@@ -8,13 +8,15 @@
 #include <QPainter>
 #include <QPainterPath>
 #include <QApplication>
-#include <QIcon>
 #include <QMenu>
 #include <QAction>
 #include <QProcess>
 #include <QFile>
 #include <QTextStream>
+#include <DDBusSender>
 #include <algorithm>
+
+#include "core/IconHelper.h"
 
 // ---- 简化委托 ----
 class LaunchItemDelegate : public QStyledItemDelegate
@@ -45,8 +47,8 @@ public:
 
         // 图标
         QString iconName = index.data(Qt::UserRole + 1).toString();
-        QIcon icon = QIcon::fromTheme(iconName);
-        if (icon.isNull()) icon = QIcon::fromTheme("application-x-executable");
+        QIcon icon = edgebarFindIcon(iconName);
+        if (icon.isNull()) icon = edgebarFindIcon("application-x-executable");
 
         int iconSize = 24;
         icon.paint(painter, rect.left() + 8, rect.top() + 6, iconSize, iconSize);
@@ -197,22 +199,22 @@ void QuickLaunchWidget::onContextMenu(const QPoint &pos)
     QMenu menu(this);
 
     // 系统操作组
-    auto *lockAct = menu.addAction(QIcon::fromTheme("lock"),
+    auto *lockAct = menu.addAction(edgebarFindIcon("lock"),
                                     QStringLiteral("锁屏"));
-    auto *logoutAct = menu.addAction(QIcon::fromTheme("system-log-out"),
+    auto *logoutAct = menu.addAction(edgebarFindIcon("system-log-out"),
                                       QStringLiteral("注销"));
     menu.addSeparator();
-    auto *suspendAct = menu.addAction(QIcon::fromTheme("system-suspend"),
+    auto *suspendAct = menu.addAction(edgebarFindIcon("system-suspend"),
                                        QStringLiteral("挂起"));
-    auto *rebootAct = menu.addAction(QIcon::fromTheme("system-reboot"),
+    auto *rebootAct = menu.addAction(edgebarFindIcon("system-reboot"),
                                       QStringLiteral("重启"));
-    auto *shutdownAct = menu.addAction(QIcon::fromTheme("system-shutdown"),
+    auto *shutdownAct = menu.addAction(edgebarFindIcon("system-shutdown"),
                                         QStringLiteral("关机"));
 
     menu.addSeparator();
 
     // 亮度调节子菜单
-    auto *brightMenu = menu.addMenu(QIcon::fromTheme("display"),
+    auto *brightMenu = menu.addMenu(edgebarFindIcon("display"),
                                     QStringLiteral("屏幕亮度"));
     auto *brightUp = brightMenu->addAction(QStringLiteral("调亮 (+10%)"));
     auto *brightDown = brightMenu->addAction(QStringLiteral("调暗 (-10%)"));
@@ -307,14 +309,16 @@ void QuickLaunchWidget::executeSystemAction(const QString &action)
             qCDebug(edgebarLog) << "Brightness set to" << newVal
                                 << "/" << maxVal;
         } else {
-            // 退用 dbus 方式
-            QProcess::startDetached("dbus-send",
-                {"--session", "--dest=com.deepin.daemon.Display",
-                 "--type=method_call", "/com/deepin/daemon/Display",
-                 "com.deepin.daemon.Display.SetBrightness",
-                 "string:intel_backlight", "double:" +
-                 QString::number(newVal * 100.0 / maxVal).toLatin1()});
-            qCWarning(edgebarLog) << "Brightness sysfs write failed, tried dbus";
+            // 退用 DDBusSender 方式
+            DDBusSender()
+                .service("com.deepin.daemon.Display")
+                .path("/com/deepin/daemon/Display")
+                .interface("com.deepin.daemon.Display")
+                .method("SetBrightness")
+                .arg(QString("intel_backlight"))
+                .arg(newVal * 100.0 / maxVal)
+                .call();
+            qCWarning(edgebarLog) << "Brightness sysfs write failed, tried DBus";
         }
     }
 }

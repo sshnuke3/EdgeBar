@@ -15,6 +15,9 @@
 #include <DPushButton>
 #include <DConfig>
 #include <DPalette>
+#include <DDBusSender>
+
+#include "core/IconHelper.h"
 
 #include <QScreen>
 #include <QGuiApplication>
@@ -27,9 +30,8 @@
 #include <QShortcut>
 #include <QPainter>
 #include <QPainterPath>
-#include <QIcon>
-#include <QDBusInterface>
-#include <QDBusReply>
+#include <QDBusPendingCallWatcher>
+#include <QDBusPendingReply>
 
 DCORE_USE_NAMESPACE
 
@@ -177,39 +179,29 @@ void MainWindow::applyWallpaperForTheme()
         return;
     }
 
-    // 通过 dbus 调用 deepin 的壁纸设置接口
-    // 路径: com.deepin.wm
-    // 方法: ChangeWallpaper
-    QDBusInterface wmInterface(QStringLiteral("com.deepin.wm"),
-                               QStringLiteral("/com/deepin/wm"),
-                               QStringLiteral("com.deepin.wm"));
+    // 通过 DDBusSender 调用 deepin Appearance 接口设置壁纸
+    QDBusPendingCall call = DDBusSender()
+        .service("com.deepin.dde.Appearance1")
+        .path("/com/deepin/dde/Appearance1")
+        .interface("com.deepin.dde.Appearance1")
+        .method("SetWallpaper")
+        .arg(QString("current"))
+        .arg(targetWallpaper)
+        .call();
 
-    if (wmInterface.isValid()) {
-        QDBusReply<void> reply = wmInterface.call(
-            QStringLiteral("ChangeWallpaper"), targetWallpaper);
-        if (reply.isValid()) {
-            qCInfo(edgebarLog) << "Wallpaper changed to:" << targetWallpaper
-                                << "for" << (dark ? "dark" : "light") << "theme";
-        } else {
+    auto *watcher = new QDBusPendingCallWatcher(call, this);
+    connect(watcher, &QDBusPendingCallWatcher::finished, this,
+            [this, targetWallpaper, dark](QDBusPendingCallWatcher *w) {
+        QDBusPendingReply<void> reply = *w;
+        if (reply.isError()) {
             qCWarning(edgebarLog) << "Failed to change wallpaper:"
                                    << reply.error().message();
-        }
-    } else {
-        // 回退方案：使用 dde 控制中心的 dbus 接口
-        QDBusInterface appearanceInterface(
-            QStringLiteral("com.deepin.dde.Appearance"),
-            QStringLiteral("/com/deepin/dde/Appearance"),
-            QStringLiteral("com.deepin.dde.Appearance"));
-
-        if (appearanceInterface.isValid()) {
-            appearanceInterface.call(QStringLiteral("SetWallpaper"),
-                                     QStringLiteral("current"),
-                                     targetWallpaper);
-            qCInfo(edgebarLog) << "Wallpaper set via Appearance interface";
         } else {
-            qCWarning(edgebarLog) << "Could not connect to wallpaper DBus interface";
+            qCInfo(edgebarLog) << "Wallpaper changed to:" << targetWallpaper
+                                << "for" << (dark ? "dark" : "light") << "theme";
         }
-    }
+        w->deleteLater();
+    });
 }
 
 // ---------------------------------------------------------------------------
@@ -247,7 +239,7 @@ void MainWindow::setupUI()
 
     for (int i = 0; i < 5; ++i) {
         auto *btn = new DPushButton(tabBar);
-        btn->setIcon(QIcon::fromTheme(QString(tabs[i].iconName)));
+        btn->setIcon(edgebarFindIcon(QString(tabs[i].iconName)));
         btn->setIconSize(QSize(14, 14));
         btn->setText(QString::fromUtf8(tabs[i].text));
         btn->setCheckable(true);
