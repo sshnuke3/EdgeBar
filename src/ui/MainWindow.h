@@ -20,6 +20,7 @@ class QuickLaunchWidget;
 class PomodoroWidget;
 class MiniCountdown;
 class HealthReminderWidget;
+class DesktopWidget;
 
 /**
  * @brief 桌边栏主窗口
@@ -61,8 +62,11 @@ private:
     void setupWindow();
     void setupEdgeTimer();
     void setupMiniCountdown();
+    void setupDesktopWidget();
+    void setupGlobalShortcuts();
     void loadConfig();
     void applyThemeColors();
+    void applyWallpaperForTheme();
 
     QPoint hiddenPosition() const;
     QPoint shownPosition() const;
@@ -79,6 +83,7 @@ private:
     PomodoroWidget       *m_pomodoroWidget = nullptr;
     HealthReminderWidget *m_healthWidget = nullptr;
     MiniCountdown        *m_miniCountdown = nullptr;
+    DesktopWidget        *m_desktopWidget = nullptr;
 
     // 核心数据
     SystemMonitor    *m_sysMonitor = nullptr;

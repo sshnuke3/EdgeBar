@@ -15,7 +15,7 @@ set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -Wextra -Wno-unused-parameter -Wno
 
 # ---- Qt 版本检测 ----
 find_package(QT NAMES Qt6 Qt5 REQUIRED COMPONENTS Core)
-find_package(Qt${QT_VERSION_MAJOR} REQUIRED COMPONENTS Core Widgets Network)
+find_package(Qt${QT_VERSION_MAJOR} REQUIRED COMPONENTS Core Widgets Network DBus)
 
 # 测试框架（可选）
 find_package(Qt${QT_VERSION_MAJOR}Test QUIET)
@@ -80,6 +80,7 @@ set(SOURCES
     src/ui/PomodoroWidget.cpp
     src/ui/MiniCountdown.cpp
     src/ui/HealthReminderWidget.cpp
+    src/ui/DesktopWidget.cpp
 )
 
 # ---- 可执行目标 ----
@@ -96,6 +97,7 @@ target_link_libraries(edgebar PRIVATE
     Qt${QT_VERSION_MAJOR}::Core
     Qt${QT_VERSION_MAJOR}::Widgets
     Qt${QT_VERSION_MAJOR}::Network
+    Qt${QT_VERSION_MAJOR}::DBus
     ${DTK_LIBS}
 )
 

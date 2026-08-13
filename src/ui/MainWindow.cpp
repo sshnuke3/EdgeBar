@@ -5,6 +5,7 @@
 #include "PomodoroWidget.h"
 #include "HealthReminderWidget.h"
 #include "MiniCountdown.h"
+#include "DesktopWidget.h"
 #include "plugins/AppLauncher.h"
 #include "plugins/SystemCommand.h"
 #include "core/Logging.h"
@@ -23,9 +24,12 @@
 #include <QVBoxLayout>
 #include <QButtonGroup>
 #include <QKeyEvent>
+#include <QShortcut>
 #include <QPainter>
 #include <QPainterPath>
 #include <QIcon>
+#include <QDBusInterface>
+#include <QDBusReply>
 
 DCORE_USE_NAMESPACE
 
@@ -40,6 +44,8 @@ MainWindow::MainWindow(QWidget *parent)
     setupWindow();
     setupEdgeTimer();
     setupMiniCountdown();
+    setupDesktopWidget();
+    setupGlobalShortcuts();
     loadConfig();
     applyThemeColors();
 
@@ -48,6 +54,7 @@ MainWindow::MainWindow(QWidget *parent)
             &DGuiApplicationHelper::themeTypeChanged,
             this, [this]() {
                 applyThemeColors();
+                applyWallpaperForTheme();
                 update();
             });
 }
@@ -138,6 +145,70 @@ void MainWindow::applyThemeColors()
     for (int i = 0; i < 5; ++i) {
         if (m_tabButtons[i])
             m_tabButtons[i]->setStyleSheet(style);
+    }
+}
+
+// ---------------------------------------------------------------------------
+// applyWallpaperForTheme: 根据深色/浅色模式切换壁纸
+// ---------------------------------------------------------------------------
+//
+// 通过 DConfig 读取用户配置的深色/浅色壁纸路径。
+// 如果配置了不同壁纸，通过 dbus 调用 deepin-wm 设置。
+// 响应论坛产品建议帖：用户希望深浅色模式切换时壁纸也跟着变。
+//
+// ---------------------------------------------------------------------------
+
+void MainWindow::applyWallpaperForTheme()
+{
+    if (!m_config || !m_config->isValid()) return;
+
+    bool dark = (DGuiApplicationHelper::instance()->themeType()
+                 == DGuiApplicationHelper::DarkType);
+
+    // 从 DConfig 读取壁纸配置
+    QString darkWallpaper = m_config->value("darkWallpaper").toString();
+    QString lightWallpaper = m_config->value("lightWallpaper").toString();
+
+    QString targetWallpaper = dark ? darkWallpaper : lightWallpaper;
+
+    if (targetWallpaper.isEmpty()) {
+        qCDebug(edgebarLog) << "No custom wallpaper configured for"
+                            << (dark ? "dark" : "light") << "theme";
+        return;
+    }
+
+    // 通过 dbus 调用 deepin 的壁纸设置接口
+    // 路径: com.deepin.wm
+    // 方法: ChangeWallpaper
+    QDBusInterface wmInterface(QStringLiteral("com.deepin.wm"),
+                               QStringLiteral("/com/deepin/wm"),
+                               QStringLiteral("com.deepin.wm"));
+
+    if (wmInterface.isValid()) {
+        QDBusReply<void> reply = wmInterface.call(
+            QStringLiteral("ChangeWallpaper"), targetWallpaper);
+        if (reply.isValid()) {
+            qCInfo(edgebarLog) << "Wallpaper changed to:" << targetWallpaper
+                                << "for" << (dark ? "dark" : "light") << "theme";
+        } else {
+            qCWarning(edgebarLog) << "Failed to change wallpaper:"
+                                   << reply.error().message();
+        }
+    } else {
+        // 回退方案：使用 dde 控制中心的 dbus 接口
+        QDBusInterface appearanceInterface(
+            QStringLiteral("com.deepin.dde.Appearance"),
+            QStringLiteral("/com/deepin/dde/Appearance"),
+            QStringLiteral("com.deepin.dde.Appearance"));
+
+        if (appearanceInterface.isValid()) {
+            appearanceInterface.call(QStringLiteral("SetWallpaper"),
+                                     QStringLiteral("current"),
+                                     targetWallpaper);
+            qCInfo(edgebarLog) << "Wallpaper set via Appearance interface";
+        } else {
+            qCWarning(edgebarLog) << "Could not connect to wallpaper DBus interface";
+        }
     }
 }
 
@@ -284,6 +355,67 @@ void MainWindow::setupMiniCountdown()
 void MainWindow::onMiniCountdownClicked()
 {
     slideIn();
+}
+
+// ---------------------------------------------------------------------------
+// setupDesktopWidget: 初始化桌面迷你小组件
+// ---------------------------------------------------------------------------
+
+void MainWindow::setupDesktopWidget()
+{
+    m_desktopWidget = new DesktopWidget(m_sysMonitor, m_pomodoroWidget,
+                                        m_healthWidget);
+    m_desktopWidget->hide();
+
+    // 双击返回面板
+    connect(m_desktopWidget, &DesktopWidget::requestReturnToPanel,
+            this, [this]() {
+        slideIn();
+        m_desktopWidget->hide();
+    });
+}
+
+// ---------------------------------------------------------------------------
+// setupGlobalShortcuts: 全局快捷键
+//   Super+E      — 唤出/隐藏 EdgeBar 面板
+//   Super+Shift+D — 切换桌面小组件显示
+// ---------------------------------------------------------------------------
+
+void MainWindow::setupGlobalShortcuts()
+{
+    // Super+E: 唤出/隐藏面板
+    auto *toggleShortcut = new QShortcut(QKeySequence("Meta+E"), this);
+    toggleShortcut->setContext(Qt::ApplicationShortcut);
+    connect(toggleShortcut, &QShortcut::activated, this, [this]() {
+        if (m_hidden) {
+            slideIn();
+        } else {
+            slideOut();
+        }
+    });
+
+    // Super+Shift+D: 切换桌面小组件
+    auto *desktopShortcut = new QShortcut(QKeySequence("Meta+Shift+D"), this);
+    desktopShortcut->setContext(Qt::ApplicationShortcut);
+    connect(desktopShortcut, &QShortcut::activated, this, [this]() {
+        if (m_desktopWidget->isVisible()) {
+            m_desktopWidget->hide();
+        } else {
+            m_desktopWidget->show();
+        }
+    });
+
+    // Ctrl+1~5: 快速切换 Tab
+    for (int i = 0; i < 5; ++i) {
+        auto *tabShortcut = new QShortcut(
+            QKeySequence(QString("Ctrl+%1").arg(i + 1)), this);
+        tabShortcut->setContext(Qt::ApplicationShortcut);
+        connect(tabShortcut, &QShortcut::activated, this, [this, i]() {
+            if (!m_hidden) {
+                setActiveTab(static_cast<TabIndex>(i));
+            }
+        });
+    }
 }
 
 void MainWindow::setEdgeSide(EdgeSide side)

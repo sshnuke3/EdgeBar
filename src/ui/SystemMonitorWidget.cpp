@@ -13,6 +13,8 @@
 #include <QFileDialog>
 #include <QStandardPaths>
 #include <QDir>
+#include <QGuiApplication>
+#include <QClipboard>
 
 SystemMonitorWidget::SystemMonitorWidget(SystemMonitor *monitor, QWidget *parent)
     : DWidget(parent)
@@ -653,6 +655,10 @@ void SystemMonitorWidget::contextMenuEvent(QContextMenuEvent *event)
         QStringLiteral("今日流量: %1 MB").arg(dailyMB));
     infoAct->setEnabled(false);
 
+    // 生成日报告
+    menu.addSeparator();
+    auto *reportAct = menu.addAction(QStringLiteral("生成今日效率报告"));
+
     QAction *ret = menu.exec(event->globalPos());
     if (ret == exportAct) {
         QString defaultPath = QStandardPaths::writableLocation(
@@ -670,5 +676,30 @@ void SystemMonitorWidget::contextMenuEvent(QContextMenuEvent *event)
                 qCInfo(edgebarLog) << "CSV exported to" << fileName;
             }
         }
+    } else if (ret == reportAct) {
+        // 生成日报告并显示
+        auto report = m_monitor->generateDailyReport();
+
+        QString reportText = QStringLiteral(
+            "===== EdgeBar 效率报告 %1 =====\n\n"
+            "CPU 平均: %2%  峰值: %3%\n"
+            "内存 平均: %4%  峰值: %5%\n"
+            "温度 平均: %6°C  最高: %7°C\n"
+            "下载: %8 MB  上传: %9 MB\n"
+            "峰值时段: %10\n"
+            "采样数: %11\n"
+            "========================"
+        ).arg(report.date.toString("yyyy-MM-dd"))
+         .arg(report.cpuAvg, 0, 'f', 1).arg(report.cpuPeak, 0, 'f', 1)
+         .arg(report.memAvg, 0, 'f', 1).arg(report.memPeak, 0, 'f', 1)
+         .arg(report.tempAvg, 0, 'f', 1).arg(report.tempPeak, 0, 'f', 1)
+         .arg(report.netDownTotal / (1024 * 1024))
+         .arg(report.netUpTotal / (1024 * 1024))
+         .arg(report.peakHour)
+         .arg(report.snapshotCount);
+
+        // 复制到剪贴板
+        QGuiApplication::clipboard()->setText(reportText);
+        qCInfo(edgebarLog) << "Daily report generated:\n" << reportText;
     }
 }

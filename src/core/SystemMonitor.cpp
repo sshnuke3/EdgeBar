@@ -605,3 +605,69 @@ void SystemMonitor::readTopMemProcesses()
         m_topMemProcesses.append(allProcs[i]);
     }
 }
+
+// ---------------------------------------------------------------------------
+// generateDailyReport: 从历史快照生成今日效率报告
+// ---------------------------------------------------------------------------
+
+SystemMonitor::DailyReport SystemMonitor::generateDailyReport() const
+{
+    DailyReport report;
+    report.date = QDate::currentDate();
+    report.cpuAvg = 0;
+    report.cpuPeak = 0;
+    report.memAvg = 0;
+    report.memPeak = 0;
+    report.tempAvg = 0;
+    report.tempPeak = 0;
+    report.netDownTotal = 0;
+    report.netUpTotal = 0;
+    report.snapshotCount = m_snapshots.size();
+    report.peakHour = QStringLiteral("--");
+
+    if (m_snapshots.isEmpty()) return report;
+
+    // 按小时分组统计
+    QMap<int, float> hourlyCpuMax;  // hour -> max cpu
+
+    float cpuSum = 0, memSum = 0, tempSum = 0;
+    int peakCpuHour = -1;
+    float peakCpuVal = 0;
+
+    for (const auto &snap : m_snapshots) {
+        cpuSum += snap.cpu;
+        memSum += snap.mem;
+        tempSum += snap.temp;
+
+        if (snap.cpu > report.cpuPeak) report.cpuPeak = snap.cpu;
+        if (snap.mem > report.memPeak) report.memPeak = snap.mem;
+        if (snap.temp > report.tempPeak) report.tempPeak = snap.temp;
+
+        // 网络总量近似：速率(KB/s) * 间隔(2s) = KB → bytes
+        report.netDownTotal += static_cast<qint64>(snap.netDown * 1024 * 2);
+        report.netUpTotal += static_cast<qint64>(snap.netUp * 1024 * 2);
+
+        // 按小时分组找峰值时段
+        QDateTime dt = QDateTime::fromSecsSinceEpoch(snap.timestamp);
+        int hour = dt.time().hour();
+        if (!hourlyCpuMax.contains(hour) || snap.cpu > hourlyCpuMax[hour]) {
+            hourlyCpuMax[hour] = snap.cpu;
+        }
+        if (snap.cpu > peakCpuVal) {
+            peakCpuVal = snap.cpu;
+            peakCpuHour = hour;
+        }
+    }
+
+    int n = m_snapshots.size();
+    report.cpuAvg = cpuSum / n;
+    report.memAvg = memSum / n;
+    report.tempAvg = tempSum / n;
+
+    if (peakCpuHour >= 0) {
+        report.peakHour = QString::number(peakCpuHour) + ":00-" +
+                          QString::number(peakCpuHour + 1) + ":00";
+    }
+
+    return report;
+}

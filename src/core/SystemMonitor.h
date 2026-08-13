@@ -115,6 +115,22 @@ public:
     /// 导出历史数据为 CSV
     bool exportCsv(const QString &filePath) const;
 
+    /// 生成今日效率报告
+    struct DailyReport {
+        QDate date;
+        float cpuAvg;        // CPU 平均使用率
+        float cpuPeak;       // CPU 峰值
+        float memAvg;        // 内存平均使用率
+        float memPeak;       // 内存峰值
+        float tempAvg;       // 平均温度
+        float tempPeak;      // 最高温度
+        qint64 netDownTotal; // 下载总量（bytes）
+        qint64 netUpTotal;   // 上传总量（bytes）
+        int snapshotCount;   // 采样数
+        QString peakHour;    // CPU 峰值时段
+    };
+    DailyReport generateDailyReport() const;
+
 signals:
     void statsUpdated();
 
