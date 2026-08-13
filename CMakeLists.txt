@@ -17,6 +17,16 @@ set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -Wextra -Wno-unused-parameter -Wno
 find_package(QT NAMES Qt6 Qt5 REQUIRED COMPONENTS Core)
 find_package(Qt${QT_VERSION_MAJOR} REQUIRED COMPONENTS Core Widgets Network)
 
+# 翻译工具（可选）
+find_package(Qt${QT_VERSION_MAJOR}LinguistTools QUIET)
+if(Qt${QT_VERSION_MAJOR}LinguistTools_FOUND)
+    message(STATUS "Qt LinguistTools found, enabling translations")
+    set(LINGUIST_FOUND TRUE)
+else()
+    message(STATUS "Qt LinguistTools not found, skipping translation compilation")
+    set(LINGUIST_FOUND FALSE)
+endif()
+
 message(STATUS "Using Qt${QT_VERSION_MAJOR}")
 
 # ---- DTK ----
@@ -36,9 +46,18 @@ else()
     set(DTK_LIBS ${DtkWidget_LIBRARIES})
 endif()
 
+# ---- 翻译 ----
+set(TS_FILES
+    translations/edgebar_zh_CN.ts
+)
+if(LINGUIST_FOUND)
+    qt_create_translation(QM_FILES ${CMAKE_SOURCE_DIR}/src ${TS_FILES})
+endif()
+
 # ---- 源文件 ----
 set(SOURCES
     src/main.cpp
+    src/core/Logging.cpp
     src/core/SystemMonitor.cpp
     src/core/ClipboardManager.cpp
     src/core/SearchEngine.cpp
@@ -72,3 +91,7 @@ target_link_libraries(edgebar PRIVATE
 install(TARGETS edgebar DESTINATION bin)
 install(FILES edgebar.desktop DESTINATION share/applications)
 install(FILES configs/edgebar.json DESTINATION share/dsg/configs/)
+if(LINGUIST_FOUND AND QM_FILES)
+    install(FILES ${QM_FILES} DESTINATION share/edgebar/translations)
+endif()
+install(FILES translations/edgebar_zh_CN.ts DESTINATION share/edgebar/translations)

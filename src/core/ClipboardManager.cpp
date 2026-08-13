@@ -90,10 +90,23 @@ void ClipboardManager::addItem(const QString &text)
     m_items.prepend(item);
 
     // 超过上限且最后一条非置顶时，删除最后一条
-    if (m_items.size() > MAX_ITEMS && !m_items.last().pinned) {
+    if (m_items.size() > m_maxItems && !m_items.last().pinned) {
         m_items.removeLast();
     }
 
+    emit historyChanged();
+}
+
+// ---------------------------------------------------------------------------
+// setMaxItems: 设置最大历史条目数
+// ---------------------------------------------------------------------------
+
+void ClipboardManager::setMaxItems(int max)
+{
+    m_maxItems = qMax(1, max);
+    while (m_items.size() > m_maxItems && !m_items.last().pinned) {
+        m_items.removeLast();
+    }
     emit historyChanged();
 }
 

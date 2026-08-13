@@ -2,9 +2,9 @@
 #include <DLog>
 
 #include <QIcon>
-#include <QDebug>
 
 #include "ui/MainWindow.h"
+#include "core/Logging.h"
 
 DCORE_USE_NAMESPACE
 DWIDGET_USE_NAMESPACE
@@ -13,6 +13,7 @@ int main(int argc, char *argv[])
 {
     DApplication app(argc, argv);
     app.setApplicationName("EdgeBar");
+    app.setOrganizationName("deepin");
     app.setApplicationVersion("1.0.0");
     app.setProductName(QStringLiteral("桌边栏 EdgeBar"));
     app.setProductIcon(QIcon::fromTheme("sidebar"));
@@ -28,16 +29,15 @@ int main(int argc, char *argv[])
 
     // 单实例
     if (!app.setSingleInstance("org.deepin.edgebar")) {
-        qWarning() << "EdgeBar is already running";
+        qCWarning(edgebarLog) << "EdgeBar is already running";
         return 0;
     }
 
-    // 主窗口
+    // 主窗口（DConfig 在构造函数中加载）
     MainWindow w;
-    w.setEdgeSide(MainWindow::RightEdge);
     w.show();
 
-    qInfo() << "EdgeBar started. Move mouse to screen edge to activate.";
+    qCInfo(edgebarLog) << "EdgeBar started. Move mouse to screen edge to activate.";
 
     return app.exec();
 }

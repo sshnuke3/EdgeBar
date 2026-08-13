@@ -6,25 +6,33 @@
             "value": "right",
             "serial": 0,
             "name": "边缘位置",
-            "description": "Panel edge: left or right"
+            "description": "Panel edge: left or right",
+            "permissions": "readwrite",
+            "visibility": "public"
         },
         "autoHide": {
             "value": true,
             "serial": 0,
             "name": "自动隐藏",
-            "description": "Auto hide panel when mouse leaves"
+            "description": "Auto hide panel when mouse leaves",
+            "permissions": "readwrite",
+            "visibility": "public"
         },
         "monitorInterval": {
             "value": 2000,
             "serial": 0,
             "name": "监控刷新间隔",
-            "description": "System monitor poll interval in milliseconds"
+            "description": "System monitor poll interval in milliseconds",
+            "permissions": "readwrite",
+            "visibility": "public"
         },
         "maxClipboardItems": {
             "value": 50,
             "serial": 0,
             "name": "剪贴板最大条数",
-            "description": "Maximum clipboard history items"
+            "description": "Maximum clipboard history items",
+            "permissions": "readwrite",
+            "visibility": "public"
         }
     }
 }

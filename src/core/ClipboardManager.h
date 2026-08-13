@@ -39,6 +39,9 @@ public:
     /// 条目数量
     int count() const { return m_items.size(); }
 
+    /// 设置最大条目数
+    void setMaxItems(int max);
+
     /// 置顶/取消置顶
     void togglePin(int id);
 
@@ -65,7 +68,7 @@ private:
     QString m_lastText;
     QTimer m_debounceTimer;
 
-    static constexpr int MAX_ITEMS = 50;
+    int m_maxItems = 50;
     static constexpr int PREVIEW_LEN = 80;
 
     void addItem(const QString &text);

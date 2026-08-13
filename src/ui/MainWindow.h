@@ -3,6 +3,11 @@
 
 #include <DMainWindow>
 #include <DWidget>
+#include <DPushButton>
+
+#include <QPropertyAnimation>
+
+#include <DConfig>
 
 #include "core/SystemMonitor.h"
 #include "core/ClipboardManager.h"
@@ -21,6 +26,7 @@ class PomodoroWidget;
  *  - 无边框 + 置顶 + DTK 毛玻璃
  *  - 鼠标靠近边缘自动滑入，离开自动滑出
  *  - 顶部 Tab 切换：系统监控 / 剪贴板 / 快速启动 / 番茄钟
+ *  - DConfig 持久化配置（边缘位置、自动隐藏、刷新间隔等）
  */
 class MainWindow : public DMainWindow
 {
@@ -35,9 +41,14 @@ public:
     void setEdgeSide(EdgeSide side);
     void setActiveTab(TabIndex tab);
 
+    /// 自动隐藏开关
+    void setAutoHide(bool enabled);
+    bool autoHide() const { return m_autoHide; }
+
 protected:
     void enterEvent(QEvent *event) override;
     void leaveEvent(QEvent *event) override;
+    void keyPressEvent(QKeyEvent *event) override;
 
 private slots:
     void checkMousePosition();
@@ -46,6 +57,9 @@ private:
     void setupUI();
     void setupWindow();
     void setupEdgeTimer();
+    void loadConfig();
+    void applyThemeColors();
+
     QPoint hiddenPosition() const;
     QPoint shownPosition() const;
     QRect  screenGeometry() const;
@@ -63,13 +77,20 @@ private:
     // 核心数据
     SystemMonitor    *m_sysMonitor = nullptr;
     ClipboardManager *m_clipboard = nullptr;
+    Dtk::Core::DConfig *m_config = nullptr;
+
+    // Tab 按钮
+    DPushButton *m_tabButtons[4] = {nullptr};
 
     // 边缘隐藏
     EdgeSide    m_edgeSide = RightEdge;
     bool        m_autoHide = true;
     bool        m_hidden = false;
     QTimer      *m_edgeTimer = nullptr;
-    class QPropertyAnimation *m_slideAnim = nullptr;
+    QPropertyAnimation *m_slideAnim = nullptr;
+
+    // 当前 Tab
+    TabIndex m_currentTab = SystemTab;
 };
 
 #endif // MAINWINDOW_H
