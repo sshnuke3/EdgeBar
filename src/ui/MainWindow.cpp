@@ -12,6 +12,7 @@
 
 #include <DPlatformHandle>
 #include <DGuiApplicationHelper>
+#include <DPaletteHelper>
 #include <DPushButton>
 #include <DConfig>
 #include <DPalette>
@@ -153,26 +154,36 @@ void MainWindow::loadConfig()
 
 void MainWindow::applyThemeColors()
 {
-    bool dark = (DGuiApplicationHelper::instance()->themeType()
-                 == DGuiApplicationHelper::DarkType);
-
-    QString normalBg = dark ? "rgba(255,255,255,0.03)" : "rgba(0,0,0,0.03)";
-    QString checkedBg = dark ? "rgba(255,255,255,0.10)" : "rgba(0,0,0,0.08)";
-    QString textColor = dark ? "rgba(255,255,255,0.85)" : "rgba(0,0,0,0.85)";
-    QString checkedText = dark ? "rgba(255,255,255,1.0)" : "rgba(0,0,0,1.0)";
-
-    QString style = QString(
+    // DTK 规范：颜色使用 DPalette 语义色，自动随系统亮/暗主题联动；
+    // setStyleSheet 仅保留布局外观属性（圆角/字号/内边距），不写颜色，
+    // 避免硬编码颜色绕过主题系统（palette.md §7）。
+    const QString layoutStyle = QStringLiteral(
         "DPushButton { border: none; border-radius: 6px; "
-        "  background: %1; font-size: 11px; color: %2; "
-        "  padding: 2px 6px; }"
-        "DPushButton:checked { background: %3; color: %4; }"
-        "DPushButton:hover { background: %5; }"
-    ).arg(normalBg, textColor, checkedBg, checkedText,
-         dark ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.05)");
+        "font-size: 11px; padding: 2px 6px; }");
 
     for (int i = 0; i < 5; ++i) {
-        if (m_tabButtons[i])
-            m_tabButtons[i]->setStyleSheet(style);
+        DPushButton *btn = m_tabButtons[i];
+        if (!btn) continue;
+
+        btn->setStyleSheet(layoutStyle);
+
+        // 基于控件当前调色板覆盖颜色角色，保留其余主题角色
+        DPalette dp = DPaletteHelper::instance()->palette(btn);
+
+        // 普通态：Button/ButtonText 语义色（ChameleonStyle 会自动生成 hover/pressed）
+        dp.setColor(QPalette::Active,   QPalette::Button, dp.base().color());
+        dp.setColor(QPalette::Inactive, QPalette::Button, dp.base().color());
+        dp.setColor(QPalette::Active,   QPalette::ButtonText, dp.textTitle().color());
+        dp.setColor(QPalette::Inactive, QPalette::ButtonText, dp.textTitle().color());
+        dp.setColor(QPalette::Disabled, QPalette::ButtonText, dp.textTips().color());
+
+        // 选中（checked）态：用 Highlight 强调色（tab 切换高亮）
+        dp.setColor(QPalette::Active,   QPalette::Highlight, dp.highlight().color());
+        dp.setColor(QPalette::Inactive, QPalette::Highlight, dp.highlight().color());
+        dp.setColor(QPalette::Active,   QPalette::HighlightedText, dp.highlightedText().color());
+        dp.setColor(QPalette::Inactive, QPalette::HighlightedText, dp.highlightedText().color());
+
+        DPaletteHelper::instance()->setPalette(btn, dp);
     }
 }
 
