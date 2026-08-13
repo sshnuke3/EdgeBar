@@ -76,8 +76,14 @@ void MainWindow::loadConfig()
 {
     // 显式指定 appId（org.deepin.edgebar），与 meta 文件安装路径
     // share/dsg/configs/org.deepin.edgebar/edgebar.json 保持一致。
+    // DTK6: DConfig::create(appId, name, subpath, parent)
+    // DTK5: DConfig(name, subpath, parent)  — name 即 meta 文件名
+#if defined(DTK_VERSION_MAJOR) && DTK_VERSION_MAJOR >= 6
     m_config = DConfig::create(QString::fromLatin1(kEdgeBarAppId),
                                QStringLiteral("edgebar"), QString(), this);
+#else
+    m_config = new DConfig(QStringLiteral("edgebar"), QString(), this);
+#endif
 
     if (!m_config->isValid()) {
         qCWarning(edgebarLog) << "DConfig not available, using defaults";
@@ -171,11 +177,15 @@ void MainWindow::applyThemeColors()
         DPalette dp = DPaletteHelper::instance()->palette(btn);
 
         // 普通态：Button/ButtonText 语义色（ChameleonStyle 会自动生成 hover/pressed）
+        // 注意：DTK5 的 textTitle() 方法名有 typo (textTiele)，直接用 brush(枚举) 避免
         dp.setColor(QPalette::Active,   QPalette::Button, dp.base().color());
         dp.setColor(QPalette::Inactive, QPalette::Button, dp.base().color());
-        dp.setColor(QPalette::Active,   QPalette::ButtonText, dp.textTitle().color());
-        dp.setColor(QPalette::Inactive, QPalette::ButtonText, dp.textTitle().color());
-        dp.setColor(QPalette::Disabled, QPalette::ButtonText, dp.textTips().color());
+        dp.setColor(QPalette::Active,   QPalette::ButtonText,
+                    dp.brush(DPalette::TextTitle).color());
+        dp.setColor(QPalette::Inactive, QPalette::ButtonText,
+                    dp.brush(DPalette::TextTitle).color());
+        dp.setColor(QPalette::Disabled, QPalette::ButtonText,
+                    dp.brush(DPalette::TextTips).color());
 
         // 选中（checked）态：用 Highlight 强调色（tab 切换高亮）
         dp.setColor(QPalette::Active,   QPalette::Highlight, dp.highlight().color());
