@@ -186,8 +186,8 @@ private:
     int m_lastTopPid = 0;
     int m_sustainedCount = 0;  // 连续高于阈值的 poll 次数
     int m_pollIntervalMs = 2000;  // poll 间隔，用于计算持续秒数
-    // pid -> (utime+stime, timestamp) 用于计算增量
-    QMap<int, QPair<qint64, qint64>> m_prevProcTimes;
+    // pid -> (utime+stime) 用于计算增量；清理时按此值排序剔除低活跃进程
+    QMap<int, qint64> m_prevProcTimes;
     // 上次 poll 的总 jiffies（用于进程 CPU% 计算）
     qint64 m_lastTotalJiffies = 0;
 
@@ -207,6 +207,11 @@ private:
     qint64  m_memPressureTotal = 0;
     int     m_memPressureThreshold = 0;  // 百分比阈值
     QList<MemProcessInfo> m_topMemProcesses;
+
+    // 内存进程扫描节流：每 TOP_MEM_SCAN_EVERY 次 poll 才全量扫描一次
+    // /proc/*/status，其余轮次复用上次结果，避免每 2 秒全量遍历进程。
+    static constexpr int TOP_MEM_SCAN_EVERY = 5;
+    int m_topMemScanCounter = 0;
 
     static constexpr int HISTORY_SIZE = 60;
 };

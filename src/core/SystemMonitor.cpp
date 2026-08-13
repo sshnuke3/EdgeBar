@@ -58,16 +58,18 @@ void SystemMonitor::poll()
     }
 
     // 采样间隔内的流量增量（bytes）
+    // 使用实际采样间隔（m_pollIntervalMs 可配置为 500~10000ms），
+    // 避免硬编码 2 秒导致流量统计失真。
     if (m_prevNetTime > 0) {
-        qint64 dtSec = 2;  // 近似间隔
-        m_dailyRxBytes += static_cast<qint64>(m_netDownload * 1024 * dtSec);
-        m_dailyTxBytes += static_cast<qint64>(m_netUpload * 1024 * dtSec);
+        const double dtSec = m_pollIntervalMs / 1000.0;
+        m_dailyRxBytes += static_cast<qint64>(m_netDownload * 1024.0 * dtSec);
+        m_dailyTxBytes += static_cast<qint64>(m_netUpload * 1024.0 * dtSec);
 
         // 流量超额告警（仅首次触发）
         if (m_trafficThresholdMB > 0) {
             qint64 totalMB = (m_dailyRxBytes + m_dailyTxBytes) / (1024 * 1024);
             qint64 prevTotalMB = (totalMB - static_cast<qint64>(
-                (m_netDownload + m_netUpload) * 1024 * dtSec / (1024 * 1024)));
+                (m_netDownload + m_netUpload) * 1024.0 * dtSec / (1024 * 1024)));
             if (totalMB >= m_trafficThresholdMB && prevTotalMB < m_trafficThresholdMB) {
                 emit trafficAlert(totalMB);
             }
@@ -226,10 +228,12 @@ void SystemMonitor::readNetDev()
             continue;
         }
 
-        rxBytes = fields[0].toLongLong();
-        txBytes = fields[8].toLongLong();
+        // 累加所有非 lo 物理接口的流量（避免只统计第一个接口
+        // 导致速率缺失或在不同启动间跳变）
+        rxBytes += fields[0].toLongLong();
+        txBytes += fields[8].toLongLong();
         found = true;
-        break;
+        // 不 break，继续累加其他接口
     }
     file.close();
 
@@ -327,7 +331,6 @@ void SystemMonitor::readTopProcess()
     QDir procDir(QStringLiteral("/proc"));
     const auto entries = procDir.entryList(QDir::Dirs | QDir::NoDotAndDotDot);
 
-    qint64 now = QDateTime::currentMSecsSinceEpoch();
     ProcessInfo bestProc;
     float bestCpu = 0;
 
@@ -371,7 +374,7 @@ void SystemMonitor::readTopProcess()
         // 查找上次记录
         auto it = m_prevProcTimes.find(pid);
         if (it != m_prevProcTimes.end() && diffTotal > 0) {
-            qint64 prevTime = it.value().first;
+            qint64 prevTime = it.value();
             qint64 diffProc = procTime - prevTime;
 
             // CPU% = diffProc / diffTotal * 100
@@ -385,17 +388,19 @@ void SystemMonitor::readTopProcess()
             }
         }
 
-        // 更新记录
-        m_prevProcTimes[pid] = qMakePair(procTime, now);
+        // 更新记录（只存 procTime，清理时按此值剔除低活跃进程）
+        m_prevProcTimes[pid] = procTime;
     }
 
     // 清理已退出的进程
-    // 简单策略：如果 map 大小超过 500，清理最旧的
+    // 策略：如果 map 大小超过 500，按 procTime（进程累计 CPU 时间）排序，
+    // 清理 procTime 最小的 100 个——这些通常是刚启动或已退出的低活跃进程。
+    // 注意不能用时间戳（now）排序：同一轮遍历中所有记录时间戳相同，
+    // 会导致排序无意义、误删活跃进程。
     if (m_prevProcTimes.size() > 500) {
-        // 按时间戳排序，删除最旧的 100 个
         QList<int> pids = m_prevProcTimes.keys();
         std::sort(pids.begin(), pids.end(), [this](int a, int b) {
-            return m_prevProcTimes[a].second < m_prevProcTimes[b].second;
+            return m_prevProcTimes[a] < m_prevProcTimes[b];
         });
         for (int i = 0; i < 100 && i < pids.size(); ++i) {
             m_prevProcTimes.remove(pids[i]);
@@ -564,6 +569,14 @@ void SystemMonitor::readMemPressure()
 
 void SystemMonitor::readTopMemProcesses()
 {
+    // 节流：每 TOP_MEM_SCAN_EVERY 次 poll 才全量扫描一次 /proc/*/status，
+    // 其余轮次保留上次结果，避免高频全量遍历造成的性能开销。
+    ++m_topMemScanCounter;
+    if (m_topMemScanCounter < TOP_MEM_SCAN_EVERY && !m_topMemProcesses.isEmpty()) {
+        return;
+    }
+    m_topMemScanCounter = 0;
+
     m_topMemProcesses.clear();
 
     QDir procDir(QStringLiteral("/proc"));
@@ -660,9 +673,10 @@ SystemMonitor::DailyReport SystemMonitor::generateDailyReport() const
         if (snap.mem > report.memPeak) report.memPeak = snap.mem;
         if (snap.temp > report.tempPeak) report.tempPeak = snap.temp;
 
-        // 网络总量近似：速率(KB/s) * 间隔(2s) = KB → bytes
-        report.netDownTotal += static_cast<qint64>(snap.netDown * 1024 * 2);
-        report.netUpTotal += static_cast<qint64>(snap.netUp * 1024 * 2);
+        // 网络总量：速率(KB/s) * 实际采样间隔(s) = KB → bytes
+        const double dtSec = m_pollIntervalMs / 1000.0;
+        report.netDownTotal += static_cast<qint64>(snap.netDown * 1024.0 * dtSec);
+        report.netUpTotal += static_cast<qint64>(snap.netUp * 1024.0 * dtSec);
 
         // 按小时分组找峰值时段
         QDateTime dt = QDateTime::fromSecsSinceEpoch(snap.timestamp);
