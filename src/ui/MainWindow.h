@@ -55,6 +55,10 @@ public:
     void setAutoHide(bool enabled);
     bool autoHide() const { return m_autoHide; }
 
+    /// Skill W-025: 暴露隐藏状态，供 newInstanceStarted 恢复窗口
+    bool isHidden_() const { return m_hidden; }
+    void slideIn();
+
 protected:
     void enterEvent(QEvent *event) override;
     void leaveEvent(QEvent *event) override;
@@ -80,7 +84,6 @@ private:
     QPoint hiddenPosition() const;
     QPoint shownPosition() const;
     QRect  screenGeometry() const;
-    void slideIn();
     void slideOut();
 
     DWidget *m_centralWidget = nullptr;
