@@ -206,7 +206,9 @@ void PomodoroWidget::paintEvent(QPaintEvent *)
     painter.drawArc(cx - radius, cy - radius, size, size, 0, 360 * 16);
 
     // ---- 进度弧线 ----
-    float progress = 1.0f - static_cast<float>(m_remaining) / m_totalSeconds;
+    float progress = m_totalSeconds > 0
+                     ? 1.0f - static_cast<float>(m_remaining) / m_totalSeconds
+                     : 1.0f;
     int angle = static_cast<int>(progress * 360);
 
     QColor arcColor = m_isBreak ? QColor(46, 204, 113) : QColor(231, 76, 60);

@@ -81,6 +81,10 @@ private:
     float m_waterProgress = 0;
     float m_standProgress = 0;
 
+    // 防止提醒信号在 2 秒窗口内重复触发
+    bool m_waterReminderSent = false;
+    bool m_standReminderSent = false;
+
     void resetDailyIfNeeded();
     QString formatCountdown(qint64 seconds) const;
 };

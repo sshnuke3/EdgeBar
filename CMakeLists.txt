@@ -115,8 +115,6 @@ install(FILES translations/edgebar_zh_CN.ts DESTINATION share/edgebar/translatio
 # ---- 单元测试 ----
 if(TEST_ENABLED)
     # 核心库源文件（不含 main.cpp）
-    # 核心库源文件（不含 main.cpp，不含 NotificationManager/AutostartManager
-    # 因为后者依赖 Qt DBus，测试目标无需链接）
     set(CORE_SOURCES
         src/core/Logging.cpp
         src/core/SystemMonitor.cpp
@@ -124,6 +122,13 @@ if(TEST_ENABLED)
         src/core/SearchEngine.cpp
         src/plugins/AppLauncher.cpp
         src/plugins/SystemCommand.cpp
+    )
+
+    # 包含 NotificationManager/AutostartManager 的核心源文件（需要 DBus + DTK）
+    set(CORE_FULL_SOURCES
+        ${CORE_SOURCES}
+        src/core/NotificationManager.cpp
+        src/core/AutostartManager.cpp
     )
 
     # SearchEngine 测试
@@ -144,6 +149,7 @@ if(TEST_ENABLED)
     target_include_directories(test_clipboardmanager PRIVATE src src/core src/plugins src/ui)
     target_link_libraries(test_clipboardmanager PRIVATE
         Qt${QT_VERSION_MAJOR}::Core
+        Qt${QT_VERSION_MAJOR}::Gui
         Qt${QT_VERSION_MAJOR}::Widgets
         Qt${QT_VERSION_MAJOR}::Test
         ${DTK_LIBS}
@@ -162,4 +168,46 @@ if(TEST_ENABLED)
         ${DTK_LIBS}
     )
     add_test(NAME systemmonitor COMMAND test_systemmonitor)
+
+    # NotificationManager 测试（需要 DBus + DTK）
+    add_executable(test_notificationmanager tests/test_notificationmanager.cpp ${CORE_FULL_SOURCES})
+    target_include_directories(test_notificationmanager PRIVATE src src/core src/plugins src/ui)
+    target_link_libraries(test_notificationmanager PRIVATE
+        Qt${QT_VERSION_MAJOR}::Core
+        Qt${QT_VERSION_MAJOR}::Gui
+        Qt${QT_VERSION_MAJOR}::Widgets
+        Qt${QT_VERSION_MAJOR}::Network
+        Qt${QT_VERSION_MAJOR}::DBus
+        Qt${QT_VERSION_MAJOR}::Test
+        ${DTK_LIBS}
+    )
+    add_test(NAME notificationmanager COMMAND test_notificationmanager)
+
+    # AutostartManager 测试
+    add_executable(test_autostartmanager tests/test_autostartmanager.cpp ${CORE_FULL_SOURCES})
+    target_include_directories(test_autostartmanager PRIVATE src src/core src/plugins src/ui)
+    target_link_libraries(test_autostartmanager PRIVATE
+        Qt${QT_VERSION_MAJOR}::Core
+        Qt${QT_VERSION_MAJOR}::Gui
+        Qt${QT_VERSION_MAJOR}::Widgets
+        Qt${QT_VERSION_MAJOR}::Test
+        ${DTK_LIBS}
+    )
+    add_test(NAME autostartmanager COMMAND test_autostartmanager)
+
+    # PomodoroWidget 测试（需要 DTK Widget）
+    set(UI_TEST_SOURCES
+        ${CORE_SOURCES}
+        src/ui/PomodoroWidget.cpp
+    )
+    add_executable(test_pomodoro tests/test_pomodoro.cpp ${UI_TEST_SOURCES})
+    target_include_directories(test_pomodoro PRIVATE src src/core src/plugins src/ui)
+    target_link_libraries(test_pomodoro PRIVATE
+        Qt${QT_VERSION_MAJOR}::Core
+        Qt${QT_VERSION_MAJOR}::Gui
+        Qt${QT_VERSION_MAJOR}::Widgets
+        Qt${QT_VERSION_MAJOR}::Test
+        ${DTK_LIBS}
+    )
+    add_test(NAME pomodoro COMMAND test_pomodoro)
 endif()

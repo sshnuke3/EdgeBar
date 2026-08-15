@@ -195,9 +195,10 @@ void HealthReminderWidget::onTick()
     if (m_lastDrinkTime.isValid()) {
         qint64 waterElapsed = m_lastDrinkTime.secsTo(now);
         qint64 waterTotal = static_cast<qint64>(m_waterIntervalMin) * 60;
-        // 在间隔到达时触发一次通知（避免重复：只在整分钟边界触发）
-        if (waterElapsed >= waterTotal && waterElapsed < waterTotal + 2) {
+        // 在间隔到达时触发一次通知（用标志位避免重复）
+        if (waterElapsed >= waterTotal && !m_waterReminderSent) {
             emit waterReminder();
+            m_waterReminderSent = true;
         }
     }
 
@@ -205,8 +206,9 @@ void HealthReminderWidget::onTick()
     if (m_lastStandTime.isValid()) {
         qint64 standElapsed = m_lastStandTime.secsTo(now);
         qint64 standTotal = static_cast<qint64>(m_standIntervalMin) * 60;
-        if (standElapsed >= standTotal && standElapsed < standTotal + 2) {
+        if (standElapsed >= standTotal && !m_standReminderSent) {
             emit standReminder();
+            m_standReminderSent = true;
         }
     }
 
@@ -229,6 +231,7 @@ void HealthReminderWidget::onDrinkWater()
 {
     m_lastDrinkTime = QDateTime::currentDateTime();
     m_waterCountToday++;
+    m_waterReminderSent = false;
     update();
 }
 
@@ -236,6 +239,7 @@ void HealthReminderWidget::onStandUp()
 {
     m_lastStandTime = QDateTime::currentDateTime();
     m_standCountToday++;
+    m_standReminderSent = false;
     update();
 }
 

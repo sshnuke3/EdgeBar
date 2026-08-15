@@ -57,7 +57,7 @@ bool AutostartManager::enable()
     file.write("Name[zh_CN]=桌边栏\n");
     file.write("Comment=Screen edge smart panel\n");
     file.write("Comment[zh_CN]=屏幕边缘滑出的智能面板\n");
-    file.write("Exec=edgebar\n");
+    file.write("Exec=/usr/bin/edgebar\n");
     file.write("Icon=sidebar\n");
     file.write("Terminal=false\n");
     file.write("Categories=Utility;\n");

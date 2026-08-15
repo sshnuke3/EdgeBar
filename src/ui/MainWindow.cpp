@@ -373,7 +373,7 @@ void MainWindow::setupEdgeTimer()
 
 void MainWindow::setupMiniCountdown()
 {
-    m_miniCountdown = new MiniCountdown();
+    m_miniCountdown = new MiniCountdown(this);
     m_miniCountdown->hide();
 
     connect(m_miniCountdown, &MiniCountdown::clicked,
@@ -403,7 +403,7 @@ void MainWindow::onMiniCountdownClicked()
 void MainWindow::setupDesktopWidget()
 {
     m_desktopWidget = new DesktopWidget(m_sysMonitor, m_pomodoroWidget,
-                                        m_healthWidget);
+                                        m_healthWidget, this);
     m_desktopWidget->hide();
 
     // 双击返回面板
