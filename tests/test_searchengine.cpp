@@ -74,10 +74,7 @@ void TestSearchEngine::testCaseInsensitive()
 
 void TestSearchEngine::testFirstCharBonus()
 {
-    // "app" 匹配 "apple" 首字母开头
-    int firstCharScore = SearchEngine::fuzzyScore("app", "apple");
-    // "pp" 匹配 "apple" 但不从首字母开始 — 但 "pp" 不是子序列
-    // 改用更好的比较：同一 target，首字母匹配 vs 中间匹配
+    // 首字母匹配 vs 中间匹配，同一 target
     int fromStart = SearchEngine::fuzzyScore("te", "terminal");
     int fromMid = SearchEngine::fuzzyScore("er", "terminal");
     QVERIFY(fromStart > fromMid);

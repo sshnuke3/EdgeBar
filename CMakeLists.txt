@@ -124,11 +124,16 @@ if(TEST_ENABLED)
         src/plugins/SystemCommand.cpp
     )
 
-    # 包含 NotificationManager/AutostartManager 的核心源文件（需要 DBus + DTK）
-    set(CORE_FULL_SOURCES
+    # 包含 AutostartManager 的核心源文件（不含 NotificationManager，避免 DBus 依赖扩散）
+    set(CORE_AUTOSTART_SOURCES
         ${CORE_SOURCES}
-        src/core/NotificationManager.cpp
         src/core/AutostartManager.cpp
+    )
+
+    # NotificationManager 测试需要的额外 UI 源文件（引用 HealthReminderWidget/PomodoroWidget 信号）
+    set(NOTIF_UI_SOURCES
+        src/ui/HealthReminderWidget.cpp
+        src/ui/PomodoroWidget.cpp
     )
 
     # SearchEngine 测试
@@ -169,8 +174,12 @@ if(TEST_ENABLED)
     )
     add_test(NAME systemmonitor COMMAND test_systemmonitor)
 
-    # NotificationManager 测试（需要 DBus + DTK）
-    add_executable(test_notificationmanager tests/test_notificationmanager.cpp ${CORE_FULL_SOURCES})
+    # NotificationManager 测试（需要 DBus + DTK + UI 依赖）
+    add_executable(test_notificationmanager tests/test_notificationmanager.cpp
+        ${CORE_SOURCES}
+        src/core/NotificationManager.cpp
+        ${NOTIF_UI_SOURCES}
+    )
     target_include_directories(test_notificationmanager PRIVATE src src/core src/plugins src/ui)
     target_link_libraries(test_notificationmanager PRIVATE
         Qt${QT_VERSION_MAJOR}::Core
@@ -183,8 +192,8 @@ if(TEST_ENABLED)
     )
     add_test(NAME notificationmanager COMMAND test_notificationmanager)
 
-    # AutostartManager 测试
-    add_executable(test_autostartmanager tests/test_autostartmanager.cpp ${CORE_FULL_SOURCES})
+    # AutostartManager 测试（不含 NotificationManager，避免 DBus 依赖）
+    add_executable(test_autostartmanager tests/test_autostartmanager.cpp ${CORE_AUTOSTART_SOURCES})
     target_include_directories(test_autostartmanager PRIVATE src src/core src/plugins src/ui)
     target_link_libraries(test_autostartmanager PRIVATE
         Qt${QT_VERSION_MAJOR}::Core
@@ -210,4 +219,9 @@ if(TEST_ENABLED)
         ${DTK_LIBS}
     )
     add_test(NAME pomodoro COMMAND test_pomodoro)
+
+    # CI/无头环境使用 offscreen 平台运行测试
+    set_tests_properties(searchengine clipboardmanager systemmonitor
+                         notificationmanager autostartmanager pomodoro
+                         PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
 endif()

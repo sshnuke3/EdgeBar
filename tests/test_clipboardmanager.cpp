@@ -109,7 +109,6 @@ void TestClipboardManager::testDeduplication()
     // 添加文本 A
     m_clipboard->setText(QStringLiteral("dedup_test_A"));
     QTest::qWait(500);
-    int countAfterA = m_mgr->count();
 
     // 添加文本 B
     m_clipboard->setText(QStringLiteral("dedup_test_B"));
