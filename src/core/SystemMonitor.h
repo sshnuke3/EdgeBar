@@ -53,11 +53,18 @@ public:
         int     pid;
         QString name;
         float   cpuPercent;  // 单核百分比（可超过 100*N核）
+        qint64  rssBytes = 0;  // 物理内存占用（bytes）
         int     sustainedSeconds = 0;  // 持续高占用秒数
     };
 
     /// 获取 CPU 占用最高的进程（无告警时为空）
     const ProcessInfo &topProcess() const { return m_topProcess; }
+
+    /// 获取 CPU 占用最高的 N 个进程列表（按 CPU% 降序）
+    QList<ProcessInfo> topCpuProcesses(int maxCount = 10);
+
+    /// 结束指定进程（SIGTERM），返回是否成功发送信号
+    bool killProcess(int pid);
 
     /// 设置 CPU 告警阈值（0=禁用）
     void setCpuAlertThreshold(int threshold) { m_cpuAlertThreshold = threshold; }
@@ -140,6 +147,8 @@ signals:
     void memPressureAlert(int level, float avg10);
     /// 流量超额告警
     void trafficAlert(qint64 totalMB);
+    /// 进程被结束
+    void processKilled(int pid, const QString &name);
 
 private slots:
     void poll();

@@ -75,6 +75,7 @@ set(SOURCES
     src/core/AutostartManager.cpp
     src/plugins/AppLauncher.cpp
     src/plugins/SystemCommand.cpp
+    src/search/GrandSearchAdaptor.cpp
     src/ui/MainWindow.cpp
     src/ui/SystemMonitorWidget.cpp
     src/ui/ClipboardWidget.cpp
@@ -83,6 +84,7 @@ set(SOURCES
     src/ui/MiniCountdown.cpp
     src/ui/HealthReminderWidget.cpp
     src/ui/DesktopWidget.cpp
+    src/ui/ProcessManagerWidget.cpp
 )
 
 # ---- 可执行目标 ----
@@ -92,6 +94,7 @@ target_include_directories(edgebar PRIVATE
     src
     src/core
     src/plugins
+    src/search
     src/ui
 )
 
@@ -107,6 +110,9 @@ target_link_libraries(edgebar PRIVATE
 install(TARGETS edgebar DESTINATION bin)
 install(FILES edgebar.desktop DESTINATION share/applications)
 install(FILES configs/edgebar.json DESTINATION share/dsg/configs/org.deepin.edgebar/)
+# dde-grand-search 插件配置（Manual 模式）
+install(FILES plugins/edgebar-search.conf
+        DESTINATION lib/x86_64-linux-gnu/dde-grand-search-daemon/plugins/searcher/)
 if(LINGUIST_FOUND AND QM_FILES)
     install(FILES ${QM_FILES} DESTINATION share/edgebar/translations)
 endif()

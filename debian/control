@@ -24,8 +24,12 @@ Description: Edge Smart Panel for deepin desktop
  .
  Features:
   * System Monitor: real-time CPU gauge, memory bar, network graph, temperature
+  * Process Manager: view and terminate high-CPU processes
   * Clipboard History: search and re-copy recent clipboard items with pin support
   * Quick Launch: fuzzy search applications and system commands
+  * Global Search Plugin: integrates with dde-grand-search
   * Pomodoro Timer: 25-min focus sessions with circular progress
+  * Desktop Widget: multi-mode mini widget (CPU/Mem/Net/Clock/Pomodoro/Water)
+  * Health Reminders: water and stand-up notifications
   * DTK blur + theme-adaptive UI
   * DConfig for persistent settings

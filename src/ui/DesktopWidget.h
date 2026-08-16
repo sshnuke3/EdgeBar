@@ -34,7 +34,10 @@ public:
     enum WidgetMode {
         CpuGaugeMode = 0,
         PomodoroMode = 1,
-        WaterMode    = 2
+        WaterMode    = 2,
+        MemGaugeMode = 3,
+        NetMode      = 4,
+        ClockMode    = 5
     };
 
     explicit DesktopWidget(SystemMonitor *monitor,
@@ -69,6 +72,12 @@ private:
     void drawCpuGauge(QPainter *painter, const QRect &rect);
     void drawPomodoro(QPainter *painter, const QRect &rect);
     void drawWater(QPainter *painter, const QRect &rect);
+    void drawMemory(QPainter *painter, const QRect &rect);
+    void drawNetwork(QPainter *painter, const QRect &rect);
+    void drawClock(QPainter *painter, const QRect &rect);
+
+    /// 格式化网速
+    QString formatNetSpeed(float kbps) const;
 
     SystemMonitor *m_monitor;
     PomodoroWidget *m_pomodoro;

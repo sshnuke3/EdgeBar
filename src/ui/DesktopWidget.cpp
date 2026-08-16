@@ -8,6 +8,8 @@
 #include <QMenu>
 #include <QAction>
 #include <QLinearGradient>
+#include <QTime>
+#include <QDate>
 #include <cmath>
 #include <QGuiApplication>
 #include <QScreen>
@@ -96,6 +98,15 @@ void DesktopWidget::paintEvent(QPaintEvent *)
         break;
     case WaterMode:
         drawWater(&painter, r);
+        break;
+    case MemGaugeMode:
+        drawMemory(&painter, r);
+        break;
+    case NetMode:
+        drawNetwork(&painter, r);
+        break;
+    case ClockMode:
+        drawClock(&painter, r);
         break;
     }
 }
@@ -302,6 +313,250 @@ void DesktopWidget::drawWater(QPainter *painter, const QRect &rect)
 }
 
 // ---------------------------------------------------------------------------
+// drawMemory: 内存仪表盘模式
+// ---------------------------------------------------------------------------
+
+void DesktopWidget::drawMemory(QPainter *painter, const QRect &rect)
+{
+    if (!m_monitor) return;
+
+    float usage = m_monitor->memUsage();
+    qint64 total = m_monitor->memTotal();
+    qint64 used = m_monitor->memUsed();
+
+    int cx = rect.center().x();
+    int cy = rect.center().y();
+    int radius = m_expanded ? 42 : 28;
+
+    // 内存颜色：蓝 → 橙 → 红
+    QColor memColor;
+    if (usage < 60)      memColor = QColor(52, 152, 219);
+    else if (usage < 85) memColor = QColor(245, 167, 38);
+    else                 memColor = QColor(231, 76, 60);
+
+    // 背景圆
+    painter->setPen(QPen(QColor(255, 255, 255, 25), 4));
+    painter->setBrush(Qt::NoBrush);
+    painter->drawEllipse(QPointF(cx, cy), radius, radius);
+
+    // 进度弧
+    int startAngle = 90 * 16;
+    int spanAngle = static_cast<int>(-usage * 360 / 100 * 16);
+    painter->setPen(QPen(memColor, 5, Qt::SolidLine, Qt::RoundCap));
+    painter->drawArc(cx - radius, cy - radius, radius * 2, radius * 2,
+                     startAngle, spanAngle);
+
+    // 内存数值
+    QFont valFont;
+    valFont.setBold(true);
+    valFont.setPointSizeF(m_expanded ? 14 : 10);
+    painter->setFont(valFont);
+    painter->setPen(QColor(255, 255, 255, 230));
+    painter->drawText(QRect(cx - radius, cy - radius, radius * 2, radius * 2),
+                      Qt::AlignCenter,
+                      QString::number(static_cast<int>(usage)) + "%");
+
+    // 标签
+    QFont labelFont;
+    labelFont.setPointSizeF(m_expanded ? 7 : 5);
+    painter->setFont(labelFont);
+    painter->setPen(QColor(255, 255, 255, 100));
+    painter->drawText(QRect(rect.left(), rect.bottom() - 16, rect.width(), 14),
+                      Qt::AlignCenter, QStringLiteral("内存"));
+
+    // 展开时显示更多信息
+    if (m_expanded) {
+        QString memStr;
+        if (used < 1024 * 1024 * 1024) {
+            memStr = QStringLiteral("%1 MB / %2 GB")
+                .arg(used / (1024 * 1024))
+                .arg(total / (1024 * 1024 * 1024));
+        } else {
+            memStr = QStringLiteral("%1 GB / %2 GB")
+                .arg(used / (1024.0 * 1024 * 1024), 0, 'f', 1)
+                .arg(total / (1024 * 1024 * 1024));
+        }
+
+        QFont infoFont;
+        infoFont.setPointSizeF(6);
+        painter->setFont(infoFont);
+        painter->setPen(QColor(255, 255, 255, 150));
+        painter->drawText(QRect(rect.left(), rect.top() + 6, rect.width(), 14),
+                          Qt::AlignCenter, memStr);
+
+        // 显示内存压力等级
+        auto level = m_monitor->memPressureLevel();
+        if (level >= SystemMonitor::MemPressureSome) {
+            QString pressureText;
+            if (level == SystemMonitor::MemPressureCritical)
+                pressureText = QStringLiteral("内存严重不足");
+            else if (level == SystemMonitor::MemPressureFull)
+                pressureText = QStringLiteral("内存压力");
+            else
+                pressureText = QStringLiteral("内存偏紧");
+
+            painter->setPen(QColor(245, 167, 38));
+            painter->drawText(QRect(rect.left(), rect.top() + 18, rect.width(), 14),
+                              Qt::AlignCenter, pressureText);
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// drawNetwork: 网络速率模式
+// ---------------------------------------------------------------------------
+
+void DesktopWidget::drawNetwork(QPainter *painter, const QRect &rect)
+{
+    if (!m_monitor) return;
+
+    float download = m_monitor->netDownload();
+    float upload = m_monitor->netUpload();
+
+    // 下载箭头 + 速率
+    QFont valFont;
+    valFont.setBold(true);
+    valFont.setPointSizeF(m_expanded ? 11 : 8);
+    painter->setFont(valFont);
+
+    // 下载
+    painter->setPen(QColor(52, 152, 219, 230));
+    painter->drawText(QRect(rect.left(), rect.top() + 14, rect.width(), 18),
+                      Qt::AlignCenter,
+                      QStringLiteral("↓ ") + formatNetSpeed(download));
+
+    // 上传
+    painter->setPen(QColor(46, 204, 113, 230));
+    painter->drawText(QRect(rect.left(), rect.top() + 34, rect.width(), 18),
+                      Qt::AlignCenter,
+                      QStringLiteral("↑ ") + formatNetSpeed(upload));
+
+    // 标签
+    QFont labelFont;
+    labelFont.setPointSizeF(m_expanded ? 7 : 5);
+    painter->setFont(labelFont);
+    painter->setPen(QColor(255, 255, 255, 100));
+    painter->drawText(QRect(rect.left(), rect.bottom() - 16, rect.width(), 14),
+                      Qt::AlignCenter, QStringLiteral("网络"));
+
+    // 展开时显示今日流量
+    if (m_expanded) {
+        qint64 dailyTotal = m_monitor->dailyRxBytes() + m_monitor->dailyTxBytes();
+        qint64 dailyMB = dailyTotal / (1024 * 1024);
+
+        QFont infoFont;
+        infoFont.setPointSizeF(6);
+        painter->setFont(infoFont);
+        painter->setPen(QColor(255, 255, 255, 150));
+        painter->drawText(QRect(rect.left(), rect.top() + 54, rect.width(), 14),
+                          Qt::AlignCenter,
+                          QStringLiteral("今日 %1 MB").arg(dailyMB));
+    }
+
+    // 简化曲线图
+    if (m_expanded) {
+        const auto &downHist = m_monitor->netDownHistory();
+        if (downHist.size() > 1) {
+            QRect graphRect(rect.left() + 10, rect.bottom() - 30,
+                           rect.width() - 20, 12);
+            painter->setPen(QPen(QColor(52, 152, 219, 150), 1));
+            QPainterPath path;
+            float maxVal = 10.0f;
+            for (float v : downHist) maxVal = qMax(maxVal, v);
+            for (int i = 0; i < downHist.size(); ++i) {
+                float x = graphRect.left() + i * graphRect.width() / (downHist.size() - 1);
+                float y = graphRect.bottom() - downHist[i] * graphRect.height() / maxVal;
+                if (i == 0) path.moveTo(x, y);
+                else        path.lineTo(x, y);
+            }
+            painter->drawPath(path);
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// drawClock: 桌面时钟模式
+// ---------------------------------------------------------------------------
+
+void DesktopWidget::drawClock(QPainter *painter, const QRect &rect)
+{
+    QTime now = QTime::currentTime();
+    QDate today = QDate::currentDate();
+
+    // 时钟数字
+    QFont timeFont;
+    timeFont.setBold(true);
+    timeFont.setPointSizeF(m_expanded ? 18 : 13);
+    timeFont.setFamily(QStringLiteral("monospace"));
+    painter->setFont(timeFont);
+    painter->setPen(QColor(255, 255, 255, 230));
+
+    QString timeStr = QString("%1:%2")
+        .arg(now.hour(), 2, 10, QChar('0'))
+        .arg(now.minute(), 2, 10, QChar('0'));
+    painter->drawText(QRect(rect.left(), rect.top() + 12, rect.width(), 30),
+                      Qt::AlignCenter, timeStr);
+
+    // 秒数（小字）
+    QFont secFont;
+    secFont.setPointSizeF(m_expanded ? 8 : 6);
+    painter->setFont(secFont);
+    painter->setPen(QColor(255, 255, 255, 120));
+    painter->drawText(QRect(rect.left(), rect.top() + 38, rect.width(), 14),
+                      Qt::AlignCenter,
+                      QString(":%1").arg(now.second(), 2, 10, QChar('0')));
+
+    // 日期
+    QFont dateFont;
+    dateFont.setPointSizeF(m_expanded ? 7 : 5);
+    painter->setFont(dateFont);
+    painter->setPen(QColor(255, 255, 255, 150));
+    painter->drawText(QRect(rect.left(), rect.bottom() - 22, rect.width(), 14),
+                      Qt::AlignCenter,
+                      today.toString(QStringLiteral("MM-dd")));
+
+    // 星期
+    QString weekDay;
+    switch (today.dayOfWeek()) {
+    case 1: weekDay = QStringLiteral("周一"); break;
+    case 2: weekDay = QStringLiteral("周二"); break;
+    case 3: weekDay = QStringLiteral("周三"); break;
+    case 4: weekDay = QStringLiteral("周四"); break;
+    case 5: weekDay = QStringLiteral("周五"); break;
+    case 6: weekDay = QStringLiteral("周六"); break;
+    case 7: weekDay = QStringLiteral("周日"); break;
+    }
+
+    painter->setPen(QColor(255, 255, 255, 100));
+    painter->drawText(QRect(rect.left(), rect.bottom() - 10, rect.width(), 12),
+                      Qt::AlignCenter, weekDay);
+
+    // 展开时显示 CPU 简报
+    if (m_expanded && m_monitor) {
+        QFont infoFont;
+        infoFont.setPointSizeF(6);
+        painter->setFont(infoFont);
+        painter->setPen(QColor(255, 255, 255, 120));
+        painter->drawText(QRect(rect.left(), rect.top() + 54, rect.width(), 14),
+                          Qt::AlignCenter,
+                          QStringLiteral("CPU %1% | 内存 %2%")
+                              .arg(static_cast<int>(m_monitor->cpuUsage()))
+                              .arg(static_cast<int>(m_monitor->memUsage())));
+    }
+}
+
+// ---------------------------------------------------------------------------
+// formatNetSpeed: 格式化网络速率
+// ---------------------------------------------------------------------------
+
+QString DesktopWidget::formatNetSpeed(float kbps) const
+{
+    if (kbps < 1024)
+        return QString::number(kbps, 'f', 1) + QStringLiteral(" KB/s");
+    return QString::number(kbps / 1024, 'f', 2) + QStringLiteral(" MB/s");
+}
+
+// ---------------------------------------------------------------------------
 // 事件处理
 // ---------------------------------------------------------------------------
 
@@ -345,8 +600,8 @@ void DesktopWidget::leaveEvent(QEvent *event)
 void DesktopWidget::mouseDoubleClickEvent(QMouseEvent *event)
 {
     if (event->button() == Qt::LeftButton) {
-        // 双击切换模式
-        int next = (static_cast<int>(m_mode) + 1) % 3;
+        // 双击切换模式（循环 6 种模式）
+        int next = (static_cast<int>(m_mode) + 1) % 6;
         setMode(static_cast<WidgetMode>(next));
     }
 }
@@ -358,6 +613,18 @@ void DesktopWidget::contextMenuEvent(QContextMenuEvent *event)
     auto *cpuAct = menu.addAction(QStringLiteral("CPU 仪表"));
     cpuAct->setCheckable(true);
     cpuAct->setChecked(m_mode == CpuGaugeMode);
+
+    auto *memAct = menu.addAction(QStringLiteral("内存仪表"));
+    memAct->setCheckable(true);
+    memAct->setChecked(m_mode == MemGaugeMode);
+
+    auto *netAct = menu.addAction(QStringLiteral("网络速率"));
+    netAct->setCheckable(true);
+    netAct->setChecked(m_mode == NetMode);
+
+    auto *clockAct = menu.addAction(QStringLiteral("桌面时钟"));
+    clockAct->setCheckable(true);
+    clockAct->setChecked(m_mode == ClockMode);
 
     auto *pomoAct = menu.addAction(QStringLiteral("番茄钟"));
     pomoAct->setCheckable(true);
@@ -375,6 +642,12 @@ void DesktopWidget::contextMenuEvent(QContextMenuEvent *event)
     QAction *ret = menu.exec(event->globalPos());
     if (ret == cpuAct) {
         setMode(CpuGaugeMode);
+    } else if (ret == memAct) {
+        setMode(MemGaugeMode);
+    } else if (ret == netAct) {
+        setMode(NetMode);
+    } else if (ret == clockAct) {
+        setMode(ClockMode);
     } else if (ret == pomoAct) {
         setMode(PomodoroMode);
     } else if (ret == waterAct) {

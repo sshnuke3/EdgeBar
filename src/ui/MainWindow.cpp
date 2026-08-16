@@ -21,6 +21,7 @@
 #include "core/IconHelper.h"
 #include "core/NotificationManager.h"
 #include "core/AutostartManager.h"
+#include "search/GrandSearchAdaptor.h"
 
 #include <QScreen>
 #include <QGuiApplication>
@@ -35,6 +36,7 @@
 #include <QPainterPath>
 #include <QDBusPendingCallWatcher>
 #include <QDBusPendingReply>
+#include <QDBusConnection>
 
 DCORE_USE_NAMESPACE
 
@@ -55,6 +57,7 @@ MainWindow::MainWindow(QWidget *parent)
     applyThemeColors();
     setupNotificationManager();
     setupAutostart();
+    setupGrandSearch();
 
     // 主题变化时重新着色
     connect(DGuiApplicationHelper::instance(),
@@ -308,8 +311,10 @@ void MainWindow::setupUI()
     m_healthWidget      = new HealthReminderWidget(m_centralWidget);
 
     // 注册插件
-    m_quickLaunchWidget->registerPlugin(new AppLauncher());
-    m_quickLaunchWidget->registerPlugin(new SystemCommand());
+    m_appLauncher = new AppLauncher();
+    m_systemCommand = new SystemCommand();
+    m_quickLaunchWidget->registerPlugin(m_appLauncher);
+    m_quickLaunchWidget->registerPlugin(m_systemCommand);
 
     // 只显示当前 Tab
     m_clipboardWidget->hide();
@@ -497,6 +502,53 @@ void MainWindow::setupAutostart()
             m_autostart->disable();
         }
     }
+}
+
+// ---------------------------------------------------------------------------
+// setupGrandSearch: 注册 dde-grand-search 全局搜索插件 DBus 服务
+// ---------------------------------------------------------------------------
+//
+// EdgeBar 作为 Manual 模式搜索插件运行：
+//   - 注册 DBus 服务 org.deepin.edgebar.SearchPlugin
+//   - 注册对象路径 /org/deepin/edgebar/SearchPlugin
+//   - 适配器 GrandSearchAdaptor 实现 V1.0 协议接口
+//
+// 全局搜索后端（dde-grand-search-daemon）通过 DBus 调用 Search/Stop/Action
+// 方法，获取 EdgeBar 提供的应用搜索、系统操作、剪贴板历史搜索结果。
+//
+// 安装配置文件 plugins/edgebar-search.conf 到
+//   /usr/lib/x86_64-linux-gnu/dde-grand-search-daemon/plugins/searcher/
+// 后重启 daemon 即可生效。
+//
+// ---------------------------------------------------------------------------
+
+void MainWindow::setupGrandSearch()
+{
+    if (!m_appLauncher || !m_systemCommand || !m_clipboard) {
+        qCWarning(edgebarLog) << "Cannot setup GrandSearch: missing dependencies";
+        return;
+    }
+
+    // 创建 DBus 适配器
+    m_searchAdaptor = new GrandSearchAdaptor(this, m_clipboard,
+                                             m_appLauncher, m_systemCommand);
+
+    // 注册 DBus 服务
+    QDBusConnection bus = QDBusConnection::sessionBus();
+    if (!bus.registerService(QStringLiteral("org.deepin.edgebar.SearchPlugin"))) {
+        qCWarning(edgebarLog) << "Failed to register DBus service:"
+                              << bus.lastError().message();
+        return;
+    }
+
+    if (!bus.registerObject(QStringLiteral("/org/deepin/edgebar/SearchPlugin"), this)) {
+        qCWarning(edgebarLog) << "Failed to register DBus object:"
+                              << bus.lastError().message();
+        return;
+    }
+
+    qCInfo(edgebarLog) << "Grand Search plugin DBus service registered:"
+                       << "org.deepin.edgebar.SearchPlugin";
 }
 
 void MainWindow::setEdgeSide(EdgeSide side)

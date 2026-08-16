@@ -1,4 +1,5 @@
 #include "SystemMonitorWidget.h"
+#include "ProcessManagerWidget.h"
 #include "core/Logging.h"
 
 #include <QPainter>
@@ -659,6 +660,10 @@ void SystemMonitorWidget::contextMenuEvent(QContextMenuEvent *event)
     menu.addSeparator();
     auto *reportAct = menu.addAction(QStringLiteral("生成今日效率报告"));
 
+    // 进程管理
+    menu.addSeparator();
+    auto *processAct = menu.addAction(QStringLiteral("进程管理"));
+
     QAction *ret = menu.exec(event->globalPos());
     if (ret == exportAct) {
         QString defaultPath = QStandardPaths::writableLocation(
@@ -701,5 +706,10 @@ void SystemMonitorWidget::contextMenuEvent(QContextMenuEvent *event)
         // 复制到剪贴板
         QGuiApplication::clipboard()->setText(reportText);
         qCInfo(edgebarLog) << "Daily report generated:\n" << reportText;
+    } else if (ret == processAct) {
+        // 打开进程管理器
+        auto *dlg = new ProcessManagerWidget(m_monitor, nullptr);
+        dlg->exec();
+        dlg->deleteLater();
     }
 }

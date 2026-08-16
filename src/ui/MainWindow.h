@@ -15,6 +15,9 @@
 // 前向声明
 class NotificationManager;
 class AutostartManager;
+class AppLauncher;
+class SystemCommand;
+class GrandSearchAdaptor;
 
 DWIDGET_USE_NAMESPACE
 
@@ -77,6 +80,7 @@ private:
     void setupGlobalShortcuts();
     void setupNotificationManager();
     void setupAutostart();
+    void setupGrandSearch();
     void loadConfig();
     void applyThemeColors();
     void applyWallpaperForTheme();
@@ -103,6 +107,9 @@ private:
     Dtk::Core::DConfig *m_config = nullptr;
     NotificationManager *m_notifier = nullptr;
     AutostartManager   *m_autostart = nullptr;
+    AppLauncher        *m_appLauncher = nullptr;
+    SystemCommand     *m_systemCommand = nullptr;
+    GrandSearchAdaptor *m_searchAdaptor = nullptr;
 
     // Tab 按钮
     DPushButton *m_tabButtons[5] = {nullptr};

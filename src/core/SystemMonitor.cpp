@@ -8,6 +8,9 @@
 #include <QDebug>
 #include <QStandardPaths>
 #include <QRegularExpression>
+#include <signal.h>
+#include <errno.h>
+#include <unistd.h>
 #include <algorithm>
 
 // ---------------------------------------------------------------------------
@@ -446,6 +449,125 @@ void SystemMonitor::readTopProcess()
         m_sustainedCount = 0;
         m_topProcess = ProcessInfo();
     }
+}
+
+// ---------------------------------------------------------------------------
+// topCpuProcesses: 按需扫描 /proc 返回 CPU 占用最高的 N 个进程
+// ---------------------------------------------------------------------------
+//
+// 独立于 readTopProcess() 的轮询逻辑，在进程管理器打开时按需调用。
+// 复用 m_prevProcTimes 中上一轮的进程时间数据计算增量。
+//
+// ---------------------------------------------------------------------------
+
+QList<SystemMonitor::ProcessInfo> SystemMonitor::topCpuProcesses(int maxCount)
+{
+    QList<ProcessInfo> result;
+
+    qint64 totalJiffies = m_prevTotal;
+    qint64 diffTotal = (m_lastTotalJiffies > 0) ? (totalJiffies - m_lastTotalJiffies) : 0;
+
+    QDir procDir(QStringLiteral("/proc"));
+    const auto entries = procDir.entryList(QDir::Dirs | QDir::NoDotAndDotDot);
+
+    for (const QString &entry : entries) {
+        bool ok = false;
+        int pid = entry.toInt(&ok);
+        if (!ok || pid <= 0) continue;
+
+        QFile statFile(QStringLiteral("/proc/%1/stat").arg(pid));
+        if (!statFile.open(QIODevice::ReadOnly | QIODevice::Text)) continue;
+
+        QString line = statFile.readLine();
+        statFile.close();
+
+        int firstParen = line.indexOf('(');
+        int lastParen = line.lastIndexOf(')');
+        if (firstParen < 0 || lastParen < 0) continue;
+
+        QString name = line.mid(firstParen + 1, lastParen - firstParen - 1);
+
+        QString rest = line.mid(lastParen + 1).trimmed();
+        const auto fields = rest.split(' ', Qt::SkipEmptyParts);
+        if (fields.size() < 13) continue;
+
+        // 读取 RSS（物理内存），field[23] 在 rest 中是 rss（第 24 个字段，0-indexed = 23）
+        qint64 rssPages = 0;
+        if (fields.size() > 23) {
+            rssPages = fields[23].toLongLong();
+        }
+        // 转换为 bytes（RSS 单位为页）
+        qint64 rssBytes = rssPages * sysconf(_SC_PAGESIZE);
+
+        qint64 utime = fields[11].toLongLong();
+        qint64 stime = fields[12].toLongLong();
+        qint64 procTime = utime + stime;
+
+        auto it = m_prevProcTimes.find(pid);
+        if (it != m_prevProcTimes.end() && diffTotal > 0) {
+            qint64 prevTime = it.value();
+            qint64 diffProc = procTime - prevTime;
+            float cpuPercent = diffProc * 100.0f / static_cast<float>(diffTotal);
+
+            if (cpuPercent > 0.1f) {
+                ProcessInfo info;
+                info.pid = pid;
+                info.name = name;
+                info.cpuPercent = cpuPercent;
+                info.rssBytes = rssBytes;
+                info.sustainedSeconds = 0;
+                result.append(info);
+            }
+        }
+    }
+
+    // 按 CPU% 降序排序
+    std::sort(result.begin(), result.end(), [](const ProcessInfo &a, const ProcessInfo &b) {
+        return a.cpuPercent > b.cpuPercent;
+    });
+
+    // 截断到 maxCount
+    if (result.size() > maxCount) {
+        result = result.mid(0, maxCount);
+    }
+
+    return result;
+}
+
+// ---------------------------------------------------------------------------
+// killProcess: 发送 SIGTERM 结束进程
+// ---------------------------------------------------------------------------
+
+bool SystemMonitor::killProcess(int pid)
+{
+    if (pid <= 0) {
+        qCWarning(edgebarLog) << "Invalid PID:" << pid;
+        return false;
+    }
+
+    // 获取进程名用于日志和信号
+    QString procName;
+    QFile statFile(QStringLiteral("/proc/%1/stat").arg(pid));
+    if (statFile.open(QIODevice::ReadOnly | QIODevice::Text)) {
+        QString line = statFile.readLine();
+        statFile.close();
+        int firstParen = line.indexOf('(');
+        int lastParen = line.lastIndexOf(')');
+        if (firstParen >= 0 && lastParen >= 0) {
+            procName = line.mid(firstParen + 1, lastParen - firstParen - 1);
+        }
+    }
+
+    // Skill 合规：使用 POSIX kill 发送 SIGTERM
+    int ret = ::kill(pid, SIGTERM);
+    if (ret != 0) {
+        qCWarning(edgebarLog) << "Failed to kill process" << pid << ":" << strerror(errno);
+        return false;
+    }
+
+    qCInfo(edgebarLog) << "Sent SIGTERM to process" << pid << "(" << procName << ")";
+    emit processKilled(pid, procName);
+    return true;
 }
 
 // ---------------------------------------------------------------------------
