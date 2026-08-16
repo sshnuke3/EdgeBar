@@ -3,8 +3,8 @@
 | 项目 | 内容 |
 |------|------|
 | 项目名称 | EdgeBar（桌边栏） |
-| 文档版本 | v1.0.0 |
-| 编写日期 | 2025-08-12 |
+| 文档版本 | v2.0.0 |
+| 编写日期 | 2025-08-16 |
 | 对应需求文档 | requirements.md v1.0.0 |
 
 ---
@@ -13,22 +13,28 @@
 
 ### 1.1 架构总览
 
-EdgeBar 采用经典的三层架构，自底向上分为核心层（core）、插件层（plugins）和表现层（ui），各层之间通过明确的接口与信号槽机制解耦。
+EdgeBar 采用分层的多模块架构，自底向上分为核心层（core）、插件层（plugins）、搜索层（search）和表现层（ui），各层之间通过明确的接口与信号槽机制解耦。
 
 ```
-┌─────────────────────────────────────────────────────┐
-│                    表现层 (ui)                        │
-│  MainWindow · SystemMonitorWidget · ClipboardWidget  │
-│  QuickLaunchWidget · PomodoroWidget                   │
-├──────────────────┬───────────────────────────────────┤
-│   插件层 (plugins)│         核心层 (core)             │
-│  ISearchPlugin    │  SystemMonitor · ClipboardManager │
-│  AppLauncher      │  SearchEngine                     │
-│  SystemCommand    │                                   │
-├──────────────────┴───────────────────────────────────┤
-│              Qt / DTK / Linux 内核接口                │
-│        /proc  /sys  QClipboard  QProcess  DConfig     │
-└─────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────────┐
+│                          表现层 (ui)                              │
+│  MainWindow · SystemMonitorWidget · ClipboardWidget             │
+│  QuickLaunchWidget · PomodoroWidget                             │
+│  ProcessManagerWidget · MiniCountdown · DesktopWidget           │
+│  HealthReminderWidget                                           │
+├──────────────────────────────────────────────────────────────────┤
+│                        搜索层 (search)                            │
+│  GrandSearchAdaptor                                             │
+├──────────────────┬───────────────────────────────────────────────┤
+│  插件层 (plugins) │              核心层 (core)                      │
+│  ISearchPlugin   │  SystemMonitor · ClipboardManager            │
+│  AppLauncher     │  SearchEngine · NotificationManager          │
+│  SystemCommand   │  AutostartManager · IconHelper · Logging     │
+├──────────────────┴───────────────────────────────────────────────┤
+│                 Qt / DTK / Linux 内核接口                         │
+│  /proc  /proc/[pid]/stat  /proc/pressure  /sys  QClipboard      │
+│  QProcess  DConfig  DBus  dde-grand-search                        │
+└──────────────────────────────────────────────────────────────────┘
 ```
 
 ### 1.2 分层职责
@@ -37,6 +43,7 @@ EdgeBar 采用经典的三层架构，自底向上分为核心层（core）、�
 |------|------|------|
 | 核心层 | `src/core/` | 提供数据采集与算法实现，不依赖 UI 框架 |
 | 插件层 | `src/plugins/` | 定义搜索插件接口并实现内置插件，可独立扩展 |
+| 搜索层 | `src/search/` | dde-grand-search DBus 适配器，实现全局搜索插件协议 |
 | 表现层 | `src/ui/` | 负责界面布局、自绘图表、交互逻辑与边缘动画 |
 
 ---
@@ -50,6 +57,14 @@ EdgeBar 采用经典的三层架构，自底向上分为核心层（core）、�
 **ClipboardManager（剪贴板管理）**：监听 `QClipboard::dataChanged` 信号，经防抖处理后保存历史记录。提供 `items()`、`filteredItems(keyword)`、`togglePin(id)`、`copyToClipboard(id)` 等接口。`ClipItem` 结构体包含 `id`、`text`、`preview`、`pinned`、`timestamp` 字段。
 
 **SearchEngine（搜索引擎）**：提供静态方法 `fuzzyScore()` 和 `containsMatch()`，实现子序列模糊匹配与评分。无状态、纯函数设计，可被任意插件复用。
+
+**NotificationManager（通知管理）**：桌面通知管理，支持 D-Bus freedesktop 通知协议（`org.freedesktop.Notifications`）并附带提示音效，负责番茄钟完成、健康提醒等场景的通知发送。
+
+**AutostartManager（自启管理）**：管理 XDG 自启目录（`~/.config/autostart`）下的 `.desktop` 文件，提供开机自启的启用与禁用，避免污染系统级自启配置。
+
+**IconHelper（图标助手）**：基于 DTK 图标引擎进行主题图标解析，将图标名或文件路径统一转换为可在控件中绘制的 `QIcon`，支持高分辨率与主题切换。
+
+**Logging（日志）**：基于 `Q_LOGGING_CATEGORY` 提供分类日志输出，按模块（core/plugins/search/ui）分别打标，便于调试与问题定位。
 
 ### 2.2 插件层模块
 
@@ -68,6 +83,14 @@ EdgeBar 采用经典的三层架构，自底向上分为核心层（core）、�
 | ClipboardWidget | DWidget | 搜索框 + 历史列表，自定义委托绘制条目 |
 | QuickLaunchWidget | DWidget | 搜索框 + 结果列表，注册并调度搜索插件 |
 | PomodoroWidget | DWidget | 番茄钟自绘圆形进度环与控制按钮 |
+| ProcessManagerWidget | DDialog | 进程列表表格，支持选中进程并发送 kill 信号终止 |
+| MiniCountdown | QWidget | 面板隐藏时的浮动迷你倒计时窗口 |
+| DesktopWidget | QWidget | 6 模式浮动桌面小部件（CPU/内存/网络/时钟/番茄/饮水） |
+| HealthReminderWidget | DWidget | 饮水与久站提醒间隔设置 |
+
+### 2.4 搜索层模块
+
+**GrandSearchAdaptor（全局搜索适配器）**：继承自 `QDBusAbstractAdaptor`，遵循 dde-grand-search V1.0 插件协议对外暴露 `Search()`、`Stop()`、`Action()` 三个方法。`Search()` 接收搜索词后同步检索应用、系统命令与剪贴板历史三类数据源，将结果聚合为 JSON 返回；`Stop()` 中止当前搜索；`Action()` 在用户点击结果时执行对应插件（应用启动、命令执行或剪贴板写入）。
 
 ---
 
@@ -126,6 +149,45 @@ plugin->search(query) ──▶ SearchEngine::fuzzyScore() 评分
         └── 休息结束 ──▶ 切换至专注(25min), m_focusCount++
 ```
 
+### 3.5 进程管理数据流
+
+```
+SystemMonitor::topCpuProcesses() ──▶ ProcessManagerWidget::refreshProcessList()
+    │
+    ▼
+QTableWidget 展示进程列表（PID/名称/CPU/内存）
+    │
+    ▼
+用户选中进程并点击"结束" ──▶ SystemMonitor::killProcess(pid, SIGTERM) ──▶ emit processKilled(pid, name)
+```
+
+### 3.6 全局搜索数据流
+
+```
+dde-grand-search-daemon ──▶ DBus 调用 ──▶ GrandSearchAdaptor::Search(query)
+    │
+    ▼
+检索应用 / 系统命令 / 剪贴板历史三类数据源
+    │
+    ▼
+聚合结果为 JSON 返回给 dde-grand-search-daemon 展示
+    │
+    ▼
+用户点击结果 ──▶ GrandSearchAdaptor::Action(itemPath)
+```
+
+### 3.7 桌面小部件数据流
+
+```
+SystemMonitor 信号 statsUpdated() ──▶ DesktopWidget::onTick()
+    │
+    ▼
+根据当前模式（CPU/内存/网络/时钟/番茄/饮水）
+    │
+    ▼
+update() ──▶ QPainter 按模式重绘对应图形
+```
+
 ---
 
 ## 4. 接口设计
@@ -161,6 +223,8 @@ public:
 | 类 | 信号/方法 | 说明 |
 |------|-----------|------|
 | SystemMonitor | `statsUpdated()` | 每次采集周期完成时发出 |
+| SystemMonitor | `processKilled(pid, name)` | 通过 `killProcess()` 终止进程后发出 |
+| SystemMonitor | `memPressureChanged(level)` | 内存压力等级变化时发出 |
 | ClipboardManager | `historyChanged()` | 历史记录变更时发出 |
 | MainWindow | `setEdgeSide(LeftEdge/RightEdge)` | 设置面板停靠边缘 |
 | MainWindow | `setActiveTab(SystemTab/ClipboardTab/LaunchTab/PomodoroTab)` | 切换标签页 |
@@ -190,6 +254,12 @@ public:
 
 **边缘检测定时器 vs 事件过滤器**：采用 300ms 定时器轮询鼠标位置。全局事件过滤器可能影响性能且需 X11/Wayland 兼容性处理。定时器方案简单可靠，CPU 开销可忽略。
 
+**进程终止采用 SIGTERM 而非 SIGKILL**：`killProcess()` 使用 POSIX `kill(pid, SIGTERM)`，允许目标进程优雅退出并释放资源，而非 `SIGKILL` 强制终止。终止前弹出确认对话框，防止误操作结束关键进程。
+
+**dde-grand-search 采用 Manual 模式**：插件以 Manual 模式注册，即始终被加载且同步执行搜索。相较于按需触发（Trigger）模式，Manual 模式实现更简单，更契合 EdgeBar 作为常驻工具的定位，且搜索数据源均为本地、延迟可忽略。
+
+**桌面小部件作为独立 QWidget**：`DesktopWidget` 是独立浮动的 `QWidget`，使用 `Qt::WindowStaysOnTopHint | Qt::Tool` 窗口标志，未嵌入 `MainWindow`，因此当面板隐藏或退出边缘动画时仍可常驻桌面显示。
+
 ---
 
 ## 6. 依赖关系
@@ -214,3 +284,5 @@ public:
 | dde-control-center | 控制中心启动 |
 | deepin-terminal | 终端启动 |
 | dde-file-manager | 文件管理器启动 |
+| dde-grand-search-daemon | 全局搜索集成（DBus 插件协议） |
+| /proc 文件系统 | 进程信息与内存压力采集 |

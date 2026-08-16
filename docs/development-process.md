@@ -5,8 +5,8 @@
 | 参赛作品 | EdgeBar（桌边栏） |
 | 参赛方向 | 方向三：DTK 原生应用开发 |
 | GitHub | https://github.com/sshnuke3/EdgeBar |
-| 版本 | v1.3.0 |
-| 日期 | 2025-08-13 |
+| 版本 | v2.0.0 |
+| 日期 | 2025-08-16 |
 
 ---
 
@@ -20,8 +20,11 @@ deepin 桌面环境在日常使用中，以下场景频繁切换应用造成效�
 - 回溯剪贴板历史无原生方案（只能再次复制覆盖）
 - 快速启动应用需回到桌面或打开启动器（全屏遮挡当前工作）
 - 番茄工作法需安装第三方工具（不集成桌面环境）
+- 系统卡顿时无法快速定位和结束高CPU进程（需打开系统监视器）
+- 全局搜索无法搜索剪贴板历史和自定义命令
+- 桌面缺少轻量级信息小组件（时钟/网速/CPU一览）
 
-这四个需求都是"短暂查看/操作即离开"的高频动作，适合用轻量级边缘面板承载。
+这七个需求都是"短暂查看/操作即离开"的高频动作，适合用轻量级边缘面板承载。
 
 ### 1.2 方案选型
 
@@ -62,7 +65,7 @@ deepin 桌面环境在日常使用中，以下场景频繁切换应用造成效�
 阶段5: GitHub 推送 ◀── 阶段4: 编译打包 ◀─────────────────┘
         │
         ▼
-阶段6: 打磨优化 ──▶ 阶段7: 文档与提交材料
+阶段6: 打磨优化 ──▶ 阶段7: 功能迭代与差异化增强 ──▶ 阶段8: 文档与提交材料
 ```
 
 ### 2.2 阶段一：项目架构设计
@@ -206,6 +209,35 @@ CMake:      3.16+
 | Qt 日志 | qWarning 无分类 | `Q_LOGGING_CATEGORY(edgebarLog)` | 代码质量 +0.5 分 |
 | 国际化 | 无 | `edgebar_zh_CN.ts` 翻译文件 | 代码质量 +0.5 分 |
 
+### 2.8 阶段七：功能迭代与差异化增强
+
+在打磨优化阶段完成后，针对用户反馈和竞品对比，进行了第三轮功能迭代，新增三个差异化功能模块：
+
+**功能1：进程管理器**
+
+| 维度 | 说明 |
+|------|------|
+| 差异化 | DeskMon 等竞品仅监控进程，EdgeBar 可直接结束进程 |
+| 实现 | `SystemMonitor::topCpuProcesses()` 遍历 `/proc/[pid]/stat` 计算单进程 CPU%，`ProcessManagerWidget` 以 DDialog 展示表格，`killProcess(pid)` 通过 POSIX kill 发送 SIGTERM |
+| 来源 | [系统监视器建议帖](https://bbs.deepin.org/phone/post/300480) |
+
+**功能2：全局搜索插件**
+
+| 维度 | 说明 |
+|------|------|
+| 方向 | 基于 dde-grand-search 框架开发搜索插件 |
+| 实现 | `GrandSearchAdaptor` 实现 `QDBusAbstractAdaptor`，遵循 V1.0 协议（Search/Stop/Action），搜索范围覆盖应用/系统命令/剪贴板历史 |
+| 配置文件 | `edgebar-search.conf` 安装到 dde-grand-search-daemon 插件目录 |
+| 参考 | [dde-grand-search 插件开发教程](https://bbs.deepin.org/phone/post/233965) |
+
+**功能3：桌面小组件增强**
+
+| 维度 | 说明 |
+|------|------|
+| 实现 | `DesktopWidget` 独立悬浮窗，6 种模式（CPU仪表/内存仪表/网络监控/时钟/番茄钟/喝水提醒） |
+| 交互 | 右键切换模式，1 秒刷新，半透明毛玻璃背景 |
+| 来源 | 用户和版主对桌面小组件的需求反馈 |
+
 ---
 
 ## 三、技术亮点
@@ -348,6 +380,18 @@ endif()
 
 面板隐藏时，在屏幕边缘显示 24×50px 的迷你浮窗，竖排显示 MM/SS 倒计时。专注模式红色背景，休息模式绿色背景。点击浮窗触发面板滑入。
 
+### 3.14 进程管理器
+
+`SystemMonitor::topCpuProcesses()` 遍历 `/proc/[pid]/stat` 计算单进程 CPU 占用率，`killProcess()` 使用 SIGTERM 优雅终止进程，`ProcessManagerWidget` 提供双击行和按钮两种结束进程方式。
+
+### 3.15 全局搜索插件
+
+`GrandSearchAdaptor` 实现 dde-grand-search V1.0 协议，采用 Manual 模式同步搜索，提供 Search/Stop/Action 三个方法，JSON 数据格式严格遵循协议规范，搜索结果覆盖应用、系统命令和剪贴板历史。
+
+### 3.16 桌面小组件
+
+`DesktopWidget` 支持 6 种模式切换（CPU仪表/内存仪表/网络监控/时钟/番茄钟/喝水提醒），每种模式使用 QPainter 自绘，独立于 MainWindow 持续显示，右键即可切换模式。
+
 ---
 
 ## 四、项目结构
@@ -359,7 +403,12 @@ EdgeBar/
 │   │   ├── SystemMonitor.h/.cpp     # /proc 读取 CPU/内存/网络/温度
 │   │   ├── ClipboardManager.h/.cpp  # 剪贴板历史管理
 │   │   ├── SearchEngine.h/.cpp      # 模糊搜索评分
+│   │   ├── NotificationManager.h/.cpp  # 系统通知管理
+│   │   ├── AutostartManager.h/.cpp  # 开机自启管理
+│   │   ├── IconHelper.h             # 图标资源辅助类
 │   │   └── Logging.h/.cpp           # Qt 日志分类
+│   ├── search/                      # 全局搜索层（dde-grand-search 集成）
+│   │   └── GrandSearchAdaptor.h/.cpp  # dde-grand-search V1.0 协议适配器
 │   ├── plugins/                     # 插件层（可扩展）
 │   │   ├── ISearchPlugin.h          # 插件接口
 │   │   ├── AppLauncher.h/.cpp       # .desktop 应用启动器
@@ -369,12 +418,26 @@ EdgeBar/
 │   │   ├── SystemMonitorWidget.h/.cpp  # QPainter 自绘图表
 │   │   ├── ClipboardWidget.h/.cpp    # 剪贴板历史列表
 │   │   ├── QuickLaunchWidget.h/.cpp # 搜索 + 结果列表
-│   │   └── PomodoroWidget.h/.cpp     # 番茄钟
+│   │   ├── PomodoroWidget.h/.cpp     # 番茄钟
+│   │   ├── ProcessManagerWidget.h/.cpp  # 进程管理器（查看/结束进程）
+│   │   ├── DesktopWidget.h/.cpp     # 桌面小组件（6 模式悬浮窗）
+│   │   ├── HealthReminderWidget.h/.cpp  # 健康提醒（喝水/久坐）
+│   │   └── MiniCountdown.h/.cpp     # 番茄钟迷你倒计时浮窗
 │   └── main.cpp                     # 入口
+├── plugins/
+│   └── edgebar-search.conf          # dde-grand-search 插件配置
+├── tests/                           # 单元测试
+│   ├── tst_systemmonitor.cpp        # SystemMonitor 测试
+│   ├── tst_clipboardmanager.cpp     # ClipboardManager 测试
+│   ├── tst_searchengine.cpp         # SearchEngine 测试
+│   ├── tst_applauncher.cpp          # AppLauncher 插件测试
+│   ├── tst_systemcommand.cpp        # SystemCommand 插件测试
+│   └── tst_pomodoro.cpp             # 番茄钟逻辑测试
 ├── docs/                            # 设计文档
 │   ├── requirements.md              # 需求规格说明书
 │   ├── outline-design.md            # 概要设计文档
-│   └── detailed-design.md           # 详细设计文档
+│   ├── detailed-design.md           # 详细设计文档
+│   └── development-process.md       # 开发过程说明
 ├── configs/edgebar.json             # DConfig 配置
 ├── translations/edgebar_zh_CN.ts    # 中英文翻译
 ├── debian/                          # Debian 打包
@@ -393,12 +456,13 @@ EdgeBar/
 
 | 维度 | 数量 |
 |------|------|
-| 源文件(.h/.cpp) | 24 个 |
-| 代码行数 | ~3800 行 |
-| 设计文档 | 3 份（700+ 行） |
-| 功能模块 | 4 个 |
+| 源文件(.h/.cpp) | 39 个 |
+| 代码行数 | ~7500 行 |
+| 设计文档 | 4 份（1000+ 行） |
+| 功能模块 | 7 个 |
 | 内置插件 | 2 个 |
-| DConfig 配置项 | 8 项 |
+| DConfig 配置项 | 15 项 |
+| 单元测试 | 6 个（~1350 行测试代码） |
 
 ---
 
@@ -423,6 +487,7 @@ EdgeBar/
 | 系统监控 | 温度指示 | 自动刷新 |
 | 系统监控 | CSV 历史数据导出 | 右键菜单 |
 | 系统监控 | 流量超额预警 | 阈值告警 |
+| 系统监控 | 进程管理器（查看/结束进程） | 右键监控页 |
 | 剪贴板 | 自动保存历史（50 条） | 后台监听 |
 | 剪贴板 | 图片历史（截图/复制图片） | 后台监听 |
 | 剪贴板 | 搜索过滤（文本+图片） | 输入关键词 |
@@ -442,6 +507,12 @@ EdgeBar/
 | 番茄钟 | 开始/暂停/重置 | 按钮控制 |
 | 番茄钟 | 番茄计数 | 完成累计 |
 | 番茄钟 | 迷你倒计时浮窗 | 面板隐藏时 |
+| 桌面小组件 | CPU/内存/网络/时钟/番茄/喝水 6模式 | 右键切换 |
+| 全局搜索 | dde-grand-search 集成 | 系统搜索框 |
+| 全局搜索 | 搜索应用/命令/剪贴板 | 输入关键词 |
+| 全局搜索 | 点击结果执行操作 | 点击结果 |
+| 健康提醒 | 喝水提醒 | 定时通知 |
+| 健康提醒 | 久坐提醒 | 定时通知 |
 | 全局 | Esc 隐藏面板 | 键盘 |
 | 全局 | Tab 切换模块 | 键盘 |
 | 全局 | Ctrl+Tab 反向切换 | 键盘 |
@@ -452,12 +523,12 @@ EdgeBar/
 
 | 评分维度 | 权重 | 自评 | 依据 |
 |----------|------|------|------|
-| 功能完整性 | 30% | 10/10 | 4 大模块 50+ 功能点，剪贴板图片+搜索+右键菜单，网速切换，CPU告警，CSV导出，流量预警，右键系统操作，番茄钟任务标签+迷你浮窗 |
-| 真实使用价值 | 20% | 10/10 | 全部功能来自 deepin 论坛真实用户需求，6 个需求帖一一对应 |
-| 创新性 | 15% | 9/10 | 四合一边缘面板 + 纯自绘图表 + 插件架构 + 图片去重hash + 进程告警 + 番茄钟任务追踪 + 迷你浮窗 |
-| UI/UX 设计 | 15% | 9/10 | DTK 毛玻璃 + 图标Tab + 键盘快捷键 + 主题自适应 + 右键菜单 + 双告警条 + 迷你浮窗 |
-| 代码质量 | 20% | 8/10 | 三层架构 + 三份设计文档 + 日志分类 + 国际化 |
-| **加权总分** | 100% | **~89** | |
+| 功能完整性 | 30% | 10/10 | 7 大模块 60+ 功能点，剪贴板图片+搜索+右键菜单，网速切换，CPU告警，CSV导出，流量预警，右键系统操作，番茄钟任务标签+迷你浮窗，进程管理器，全局搜索，桌面小组件 |
+| 真实使用价值 | 20% | 10/10 | 全部功能来自 deepin 论坛真实用户需求，8+ 个需求帖一一对应 |
+| 创新性 | 15% | 9/10 | 四合一边缘面板 + 纯自绘图表 + 插件架构 + 图片去重hash + 进程告警 + 番茄钟任务追踪 + 迷你浮窗 + 进程结束 + dde-grand-search 集成 + 6 模式桌面小组件 |
+| UI/UX 设计 | 15% | 9/10 | DTK 毛玻璃 + 图标Tab + 键盘快捷键 + 主题自适应 + 右键菜单 + 双告警条 + 迷你浮窗 + 桌面小组件 + 进程管理器对话框 |
+| 代码质量 | 20% | 9/10 | 三层架构 + 四份设计文档 + 日志分类 + 国际化 + 6 个单元测试 + Q_LOGGING_CATEGORY |
+| **加权总分** | 100% | **~92** | |
 
 ---
 
@@ -476,9 +547,9 @@ EdgeBar/
 
 | Skill | 用途 |
 |-------|------|
-| `dtk-development` | DTK 开发规范参考（通过 deepin-skills 仓库学习） |
+| `dtk-development` | DTK 开发规范参考（通过 deepin-skills 仓库学习），全程遵循 skill 规范：DApplication 用法、DConfig 配置模式、DLogManager 日志记录、DDBusSender 调用 deepin Appearance 接口 |
 | `dde-control-center-development` | 控制中心方向了解（对比后未选此方向） |
 | `dde-tray-development` | 托盘插件方向了解（对比后未选此方向） |
 | `dde-shell-development` | DDE Shell 扩展方向了解（对比后未选此方向） |
 
-开发过程中通过参考 deepin-skills 仓库的 dtk-codeviewer 示例项目，学习了 DTK 应用的代码规范、文档结构和 DConfig 用法。
+开发过程中通过参考 deepin-skills 仓库的 dtk-codeviewer 示例项目，学习了 DTK 应用的代码规范、文档结构和 DConfig 用法。dtk-development skill 的各项规范贯穿整个开发周期：使用 DApplication 管理应用生命周期与单实例，采用 DConfig 标准模式读写配置，通过 DLogManager 进行结构化日志输出，并使用 DDBusSender 与 deepin Appearance 接口交互实现主题适配。
